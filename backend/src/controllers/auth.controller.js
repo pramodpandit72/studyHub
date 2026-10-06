@@ -85,7 +85,7 @@ export const signup = async (req, res) => {
     });
 
     const responseData = { sent: true, email: normalizedEmail };
-    if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
+    if (process.env.NODE_ENV !== 'production') {
       responseData.devOtp = otp;
     }
 
@@ -137,7 +137,7 @@ export const resendSignupOtp = async (req, res) => {
     });
 
     const responseData = { sent: true, email: normalizedEmail };
-    if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
+    if (process.env.NODE_ENV !== 'production') {
       responseData.devOtp = otp;
     }
 
@@ -301,7 +301,7 @@ export const forgotPassword = async (req, res) => {
     });
 
     const responseData = { sent: true, email: user.email };
-    if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
+    if (process.env.NODE_ENV !== 'production') {
       responseData.devCode = resetCode;
     }
 

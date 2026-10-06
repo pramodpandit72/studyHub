@@ -29,6 +29,23 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(generalLimiter);
 
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'viMeet Backend API is live and operational.',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      meetings: '/api/meetings',
+    },
+  });
+});
+
+app.get('/api', (req, res) => {
+  res.json({ success: true, message: 'viMeet API root.' });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'viMeet API is running.' });
 });

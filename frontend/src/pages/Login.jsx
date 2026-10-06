@@ -2,10 +2,9 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { useTheme } from '../context/ThemeContext';
 import { authApi } from '../services/auth.api';
 import { ButtonLoader } from '../components/common/Loader';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, Sun, Moon } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
@@ -16,7 +15,6 @@ export const Login = () => {
 
   const { login } = useAuth();
   const { success, error } = useToast();
-  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -60,8 +58,8 @@ export const Login = () => {
   return (
     <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md">
-        {/* Navigation Bar: Back Button & Theme Toggle */}
-        <div className="mb-4 flex items-center justify-between">
+        {/* Navigation Bar: Back Button */}
+        <div className="mb-4">
           <Link
             to="/"
             className="btn btn-secondary btn-sm inline-flex items-center gap-1.5"
@@ -69,16 +67,6 @@ export const Login = () => {
             <ArrowLeft size={15} />
             <span>← Back to Home</span>
           </Link>
-
-          <button
-            onClick={toggleTheme}
-            className="btn btn-secondary btn-sm flex items-center gap-1.5"
-            title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-            <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
-          </button>
         </div>
 
         {/* Card */}
@@ -112,7 +100,7 @@ export const Login = () => {
                 <input
                   id="email"
                   type="email"
-                  placeholder="name@example.com"
+                  placeholder="Email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="input-field pl-10 text-sm"
@@ -143,7 +131,7 @@ export const Login = () => {
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
+                  placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="input-field pl-10 pr-10 text-sm"

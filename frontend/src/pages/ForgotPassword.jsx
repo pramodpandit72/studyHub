@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
-import { useTheme } from '../context/ThemeContext';
 import { authApi } from '../services/auth.api';
 import { ButtonLoader } from '../components/common/Loader';
 import {
@@ -14,8 +13,6 @@ import {
   ArrowLeft,
   RotateCw,
   CheckCircle2,
-  Sun,
-  Moon,
 } from 'lucide-react';
 
 export const ForgotPassword = () => {
@@ -32,7 +29,6 @@ export const ForgotPassword = () => {
   const [devCode, setDevCode] = useState(null);
 
   const { success, error } = useToast();
-  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -134,8 +130,8 @@ export const ForgotPassword = () => {
   return (
     <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md">
-        {/* Navigation Bar: Back Button & Theme Toggle */}
-        <div className="mb-4 flex items-center justify-between">
+        {/* Navigation Bar: Back Button */}
+        <div className="mb-4">
           {step === 1 || step === 4 ? (
             <Link
               to="/login"
@@ -156,16 +152,6 @@ export const ForgotPassword = () => {
               <span>← Back</span>
             </button>
           )}
-
-          <button
-            onClick={toggleTheme}
-            className="btn btn-secondary btn-sm flex items-center gap-1.5"
-            title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-            <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
-          </button>
         </div>
 
         {/* Card */}

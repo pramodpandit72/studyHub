@@ -153,7 +153,16 @@ export const Signup = () => {
         setCountdown(60);
         setCurrentStep(4);
       } catch (err) {
-        const msg = err.response?.data?.message || 'Registration failed. Email may already be registered.';
+        let msg = 'Registration failed. Please try again.';
+        if (err.response?.data?.message) {
+          msg = err.response.data.message;
+        } else if (err.message === 'Network Error' || !err.response) {
+          msg = 'Unable to connect to backend server. Please verify your connection or backend URL.';
+        } else if (err.response?.status === 404) {
+          msg = 'Backend endpoint not found (404). Please verify your VITE_API_URL.';
+        } else if (err.response?.status >= 500) {
+          msg = 'Server error occurred while processing registration. Please try again.';
+        }
         setErrorMsg(msg);
         error(msg);
       } finally {
@@ -178,7 +187,12 @@ export const Signup = () => {
       success('Account created and verified successfully! You can now log in.');
       navigate('/login', { replace: true });
     } catch (err) {
-      const msg = err.response?.data?.message || 'Invalid or expired OTP. Please check your email and try again.';
+      let msg = 'Invalid or expired OTP. Please check your email and try again.';
+      if (err.response?.data?.message) {
+        msg = err.response.data.message;
+      } else if (err.message === 'Network Error' || !err.response) {
+        msg = 'Unable to connect to backend server. Please check your internet connection.';
+      }
       setErrorMsg(msg);
       error(msg);
     } finally {
@@ -198,7 +212,12 @@ export const Signup = () => {
         setDevOtpCode(data.data.devOtp);
       }
     } catch (err) {
-      const msg = err.response?.data?.message || 'Failed to resend verification OTP.';
+      let msg = 'Failed to resend verification OTP.';
+      if (err.response?.data?.message) {
+        msg = err.response.data.message;
+      } else if (err.message === 'Network Error' || !err.response) {
+        msg = 'Unable to connect to backend server. Please check your internet connection.';
+      }
       setErrorMsg(msg);
       error(msg);
     } finally {

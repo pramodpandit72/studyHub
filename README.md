@@ -6,13 +6,14 @@ viMeet is a lightweight, responsive online meeting and virtual classroom platfor
 
 ## Features
 
-- **Multi-step Signup Onboarding**:
-  - Step 1: Personal Details (Full Name, Email Address, Mobile Number, Age)
+- **Multi-step Signup with Email OTP Verification**:
+  - Step 1: Personal Details (Full Name, Email Address [required], Mobile Number [required], Age [required])
   - Step 2: Role & Learning Profile (Role, What the user is studying/preparing for, Institution, Experience Level)
   - Step 3: Account Security (Password, Confirm Password)
-  - Immediate account creation & JWT issuance upon completion
+  - Step 4: Email OTP Verification (4-digit OTP sent to email via EmailJS with resend cooldown and 10-minute expiry)
+  - Account creation only completes once OTP is verified, followed by clean redirect to Login
 - **Email + Password Login**:
-  - Email + Password authentication with bcrypt hashing and JWT tokens
+  - Email + Password authentication with bcrypt hashing and JWT tokens (OTP is only for email verification during signup)
   - Direct `[Forgot Password?]` recovery navigation
 - **Secure Password Recovery via EmailJS**:
   - Enter registered email address

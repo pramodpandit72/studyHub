@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import app from './src/app.js';
 import User from './src/models/User.js';
+import SignupVerification from './src/models/SignupVerification.js';
 import Meeting from './src/models/Meeting.js';
 import Attendance from './src/models/Attendance.js';
 import env from './src/config/env.js';
@@ -15,7 +16,7 @@ let baseUrl;
 
 const runTests = async () => {
   console.log('====================================================');
-  console.log('       viMeet AUTH & INTEGRATION TEST SUITE        ');
+  console.log('    viMeet AUTH (EMAIL OTP SIGNUP) & TEST SUITE     ');
   console.log('====================================================');
 
   await mongoose.connect(env.MONGO_URI);
@@ -67,8 +68,11 @@ const runTests = async () => {
         { mobile: { $in: [testMobileA, testMobileB] } },
       ],
     });
+    await SignupVerification.deleteMany({
+      email: { $in: [testEmailA, testEmailB] },
+    });
 
-    console.log('\n--- 1. SIGNUP AUTHENTICATION TESTS ---');
+    console.log('\n--- 1. SIGNUP & EMAIL OTP VERIFICATION TESTS ---');
     // 1.1 Signup Validation: missing fields
     let res = await req('/auth/signup', 'POST', { name: 'Test User' });
     assert(res.status === 400, 'Signup rejects missing required fields (HTTP 400)');
@@ -106,7 +110,7 @@ const runTests = async () => {
     });
     assert(res.status === 400, 'Signup rejects passwords < 6 characters (HTTP 400)');
 
-    // 1.5 Valid Signup User A (Email + Mobile + Password + Details)
+    // 1.5 Valid Signup Initiation for User A (Sends 4-digit OTP via EmailJS)
     res = await req('/auth/signup', 'POST', {
       name: 'Instructor Ramesh',
       email: testEmailA,
@@ -118,10 +122,33 @@ const runTests = async () => {
       experienceLevel: 'Advanced',
       password: 'password123',
     });
-    assert(res.status === 201 && res.data.success && res.data.data?.token, 'Valid signup succeeds for User A and returns JWT (HTTP 201)');
-    let tokenA = res.data.data?.token;
+    assert(res.status === 200 && res.data.success && res.data.data?.sent, 'Signup initiation sends 4-digit OTP to email (HTTP 200)');
+    const devOtpA = res.data.data?.devOtp;
+    assert(typeof devOtpA === 'string' && devOtpA.length === 4, '4-digit OTP generated for verification');
 
-    // 1.6 Duplicate Email rejected
+    // 1.6 Verify User account does NOT exist in DB prior to OTP verification
+    const unverifiedUserDoc = await User.findOne({ email: testEmailA });
+    assert(unverifiedUserDoc === null, 'User account is NOT created in DB before OTP is verified');
+
+    // 1.7 Attempting to login before OTP verification fails
+    res = await req('/auth/login', 'POST', { email: testEmailA, password: 'password123' });
+    assert(res.status === 401, 'Login fails for unverified user (HTTP 401)');
+
+    // 1.8 Verify OTP with incorrect code fails
+    res = await req('/auth/signup/verify', 'POST', { email: testEmailA, otp: '0000' });
+    assert(res.status === 400 && !res.data.success, 'Verify signup OTP rejects incorrect OTP (HTTP 400)');
+
+    // 1.9 Verify OTP with valid 4-digit code creates account
+    res = await req('/auth/signup/verify', 'POST', { email: testEmailA, otp: devOtpA });
+    assert(res.status === 201 && res.data.success && res.data.data?.user?.email === testEmailA, 'Verify signup OTP activates account and creates User (HTTP 201)');
+
+    // 1.10 User is now in DB and SignupVerification record is removed
+    const createdUserDoc = await User.findOne({ email: testEmailA });
+    assert(createdUserDoc !== null && createdUserDoc.email === testEmailA, 'User is now stored in database');
+    const pendingRecord = await SignupVerification.findOne({ email: testEmailA });
+    assert(pendingRecord === null, 'Pending signup verification record is cleaned up');
+
+    // 1.11 Duplicate email signup rejected
     res = await req('/auth/signup', 'POST', {
       name: 'Duplicate Email User',
       email: testEmailA,
@@ -130,20 +157,20 @@ const runTests = async () => {
       role: 'Student',
       password: 'password123',
     });
-    assert(res.status === 400 && res.data.message.includes('email'), 'Signup rejects duplicate email (HTTP 400)');
+    assert(res.status === 400 && res.data.message.includes('email'), 'Signup rejects already registered email (HTTP 400)');
 
-    // 1.7 Duplicate Mobile rejected
+    // 1.12 Duplicate mobile signup rejected
     res = await req('/auth/signup', 'POST', {
       name: 'Duplicate Mobile User',
-      email: 'different@example.com',
+      email: 'another@example.com',
       mobile: testMobileA,
       age: 24,
       role: 'Student',
       password: 'password123',
     });
-    assert(res.status === 400 && res.data.message.includes('mobile'), 'Signup rejects duplicate mobile number (HTTP 400)');
+    assert(res.status === 400 && res.data.message.includes('mobile'), 'Signup rejects already registered mobile number (HTTP 400)');
 
-    // 1.8 Signup User B (Student)
+    // 1.13 Signup User B (Student) with Email OTP verification
     res = await req('/auth/signup', 'POST', {
       name: 'Student Priya',
       email: testEmailB,
@@ -155,8 +182,10 @@ const runTests = async () => {
       experienceLevel: 'Intermediate',
       password: 'password456',
     });
-    assert(res.status === 201 && res.data.data?.token, 'Valid signup succeeds for User B (HTTP 201)');
-    const tokenB = res.data.data?.token;
+    assert(res.status === 200 && res.data.data?.sent, 'Signup initiates for User B');
+    const devOtpB = res.data.data?.devOtp;
+    res = await req('/auth/signup/verify', 'POST', { email: testEmailB, otp: devOtpB });
+    assert(res.status === 201 && res.data.data?.user, 'User B verified and created in DB (HTTP 201)');
 
     console.log('\n--- 2. EMAIL + PASSWORD LOGIN TESTS ---');
     // 2.1 Login missing email or password
@@ -171,16 +200,21 @@ const runTests = async () => {
     res = await req('/auth/login', 'POST', { email: testEmailA, password: 'wrongpassword' });
     assert(res.status === 401, 'Login rejects incorrect password (HTTP 401)');
 
-    // 2.4 Login with valid Email + Password
+    // 2.4 Login User A with valid Email + Password
     res = await req('/auth/login', 'POST', { email: testEmailA, password: 'password123' });
-    assert(res.status === 200 && res.data.data?.token && res.data.data?.user?.email === testEmailA, 'Login succeeds with valid email + password (HTTP 200)');
-    tokenA = res.data.data?.token;
+    assert(res.status === 200 && res.data.data?.token && res.data.data?.user?.email === testEmailA, 'User A login succeeds with email + password (HTTP 200)');
+    let tokenA = res.data.data?.token;
 
-    // 2.5 Auth Check /api/auth/me
+    // 2.5 Login User B with valid Email + Password
+    res = await req('/auth/login', 'POST', { email: testEmailB, password: 'password456' });
+    assert(res.status === 200 && res.data.data?.token, 'User B login succeeds with email + password (HTTP 200)');
+    const tokenB = res.data.data?.token;
+
+    // 2.6 Auth Check /api/auth/me
     res = await req('/auth/me', 'GET', null, tokenA);
     assert(res.status === 200 && res.data.data.user.name === 'Instructor Ramesh', 'Protected route /api/auth/me returns current user');
 
-    // 2.6 Unauthorized access without token
+    // 2.7 Unauthorized access without token
     res = await req('/auth/me', 'GET');
     assert(res.status === 401, 'Protected route rejects requests without token (HTTP 401)');
 
@@ -362,6 +396,9 @@ const runTests = async () => {
         { email: { $in: [testEmailA, testEmailB] } },
         { mobile: { $in: [testMobileA, testMobileB] } },
       ],
+    });
+    await SignupVerification.deleteMany({
+      email: { $in: [testEmailA, testEmailB] },
     });
 
     console.log('\n====================================================');

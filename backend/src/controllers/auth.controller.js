@@ -1,12 +1,13 @@
 import crypto from 'crypto';
 import User from '../models/User.js';
+import SignupVerification from '../models/SignupVerification.js';
 import emailService from '../services/email.service.js';
 import { generateToken } from '../middleware/auth.middleware.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import env from '../config/env.js';
 
 /**
- * Register a new user
+ * Initiate signup: Validate details, store pending registration, send 4-digit email OTP via EmailJS
  * Payload: { name, email, mobile, age, role, studyOrPreparation, institution, experienceLevel, password }
  */
 export const signup = async (req, res) => {
@@ -36,44 +37,187 @@ export const signup = async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    const normalizedMobile = mobile.trim();
 
-    // Check if email already registered
+    // Check if email already registered in activated User accounts
     const existingEmailUser = await User.findOne({ email: normalizedEmail });
     if (existingEmailUser) {
       return sendError(res, 400, 'An account with this email address already exists.');
     }
 
-    // Check if mobile number already registered
-    const existingMobileUser = await User.findOne({ mobile: mobile.trim() });
+    // Check if mobile already registered in activated User accounts
+    const existingMobileUser = await User.findOne({ mobile: normalizedMobile });
     if (existingMobileUser) {
       return sendError(res, 400, 'An account with this mobile number already exists.');
     }
 
-    const user = await User.create({
-      name: name.trim(),
+    // Generate secure 4-digit OTP
+    const otp = crypto.randomInt(1000, 10000).toString();
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+
+    // Remove any previous pending registration for this email
+    await SignupVerification.deleteMany({ email: normalizedEmail });
+
+    // Store pending signup data (10-minute expiry)
+    await SignupVerification.create({
       email: normalizedEmail,
-      mobile: mobile.trim(),
-      age: ageNum,
-      role,
-      studyOrPreparation: studyOrPreparation ? studyOrPreparation.trim() : '',
-      institution: institution ? institution.trim() : '',
-      experienceLevel: experienceLevel ? experienceLevel.trim() : '',
-      password,
+      otpHash,
+      signupData: {
+        name: name.trim(),
+        mobile: normalizedMobile,
+        age: ageNum,
+        role,
+        studyOrPreparation: studyOrPreparation ? studyOrPreparation.trim() : '',
+        institution: institution ? institution.trim() : '',
+        experienceLevel: experienceLevel ? experienceLevel.trim() : '',
+        password,
+      },
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      attempts: 0,
+      lastResendAt: new Date(),
     });
 
-    const token = generateToken(user._id);
+    // Send 4-digit OTP to user's email via EmailJS
+    await emailService.sendSignupOtpEmail({
+      toEmail: normalizedEmail,
+      toName: name.trim(),
+      otp,
+    });
 
-    return sendSuccess(res, 201, 'Account created successfully.', {
-      token,
+    const responseData = { sent: true, email: normalizedEmail };
+    if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
+      responseData.devOtp = otp;
+    }
+
+    return sendSuccess(res, 200, 'Verification OTP sent to your email. Please verify to complete account creation.', responseData);
+  } catch (error) {
+    console.error('Signup initiate error:', error);
+    return sendError(res, 500, 'Registration initiation failed. Please try again.');
+  }
+};
+
+/**
+ * Resend Signup Email OTP
+ * Payload: { email }
+ */
+export const resendSignupOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return sendError(res, 400, 'Email is required.');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const record = await SignupVerification.findOne({ email: normalizedEmail });
+
+    if (!record) {
+      return sendError(res, 404, 'No pending registration found for this email. Please sign up again.');
+    }
+
+    // Enforce 60-second cooldown
+    const elapsedSeconds = (Date.now() - new Date(record.lastResendAt).getTime()) / 1000;
+    if (elapsedSeconds < 60) {
+      const waitSeconds = Math.ceil(60 - elapsedSeconds);
+      return sendError(res, 429, `Please wait ${waitSeconds} seconds before requesting a new OTP.`);
+    }
+
+    // Generate new 4-digit OTP
+    const otp = crypto.randomInt(1000, 10000).toString();
+    record.otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+    record.expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    record.attempts = 0;
+    record.lastResendAt = new Date();
+    await record.save();
+
+    await emailService.sendSignupOtpEmail({
+      toEmail: normalizedEmail,
+      toName: record.signupData.name,
+      otp,
+    });
+
+    const responseData = { sent: true, email: normalizedEmail };
+    if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
+      responseData.devOtp = otp;
+    }
+
+    return sendSuccess(res, 200, 'A new verification OTP has been sent to your email.', responseData);
+  } catch (error) {
+    console.error('Resend signup OTP error:', error);
+    return sendError(res, 500, 'Failed to resend verification OTP. Please try again.');
+  }
+};
+
+/**
+ * Verify Signup OTP & Create Account
+ * Payload: { email, otp }
+ */
+export const verifySignupOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return sendError(res, 400, 'Email and OTP are required.');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const record = await SignupVerification.findOne({ email: normalizedEmail });
+
+    if (!record) {
+      return sendError(res, 400, 'No pending registration found or verification expired. Please sign up again.');
+    }
+
+    if (new Date() > record.expiresAt) {
+      await SignupVerification.deleteOne({ _id: record._id });
+      return sendError(res, 400, 'Verification OTP has expired. Please sign up again.');
+    }
+
+    if (record.attempts >= 5) {
+      await SignupVerification.deleteOne({ _id: record._id });
+      return sendError(res, 429, 'Too many incorrect attempts. Please sign up again.');
+    }
+
+    const candidateHash = crypto.createHash('sha256').update(otp.trim()).digest('hex');
+    if (candidateHash !== record.otpHash) {
+      record.attempts += 1;
+      await record.save();
+      return sendError(res, 400, 'Invalid verification OTP. Please check your email and try again.');
+    }
+
+    // Verify uniqueness again to prevent race condition
+    const conflict = await User.findOne({
+      $or: [{ email: normalizedEmail }, { mobile: record.signupData.mobile }],
+    });
+    if (conflict) {
+      await SignupVerification.deleteOne({ _id: record._id });
+      return sendError(res, 400, 'An account with this email or mobile already exists.');
+    }
+
+    // Create the user in the database now that OTP is verified
+    const user = await User.create({
+      name: record.signupData.name,
+      email: normalizedEmail,
+      mobile: record.signupData.mobile,
+      age: record.signupData.age,
+      role: record.signupData.role,
+      studyOrPreparation: record.signupData.studyOrPreparation,
+      institution: record.signupData.institution,
+      experienceLevel: record.signupData.experienceLevel,
+      password: record.signupData.password,
+    });
+
+    // Clean up temporary verification record
+    await SignupVerification.deleteOne({ _id: record._id });
+
+    return sendSuccess(res, 201, 'Account created and verified successfully! You can now log in.', {
       user: user.toProfile(),
     });
   } catch (error) {
-    console.error('Signup error:', error);
+    console.error('Verify signup OTP error:', error);
     if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern || {})[0] || 'Email or Mobile';
-      return sendError(res, 400, `An account with this ${field} already exists.`);
+      return sendError(res, 400, 'An account with this email or mobile already exists.');
     }
-    return sendError(res, 500, 'Registration failed. Please try again.');
+    return sendError(res, 500, 'Account verification failed. Please try again.');
   }
 };
 

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import {
   signup,
+  resendSignupOtp,
+  verifySignupOtp,
   login,
   forgotPassword,
   verifyResetCode,
@@ -13,8 +15,12 @@ import { authLimiter, passwordResetLimiter } from '../middleware/rateLimit.middl
 
 const router = Router();
 
-// Authentication
+// Signup with Email OTP Verification
 router.post('/signup', authLimiter, signup);
+router.post('/signup/resend-otp', authLimiter, resendSignupOtp);
+router.post('/signup/verify', authLimiter, verifySignupOtp);
+
+// Login (Email + Password only)
 router.post('/login', authLimiter, login);
 
 // Password recovery via EmailJS

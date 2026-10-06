@@ -8,6 +8,14 @@ const userSchema = new mongoose.Schema({
     trim: true,
     maxlength: [100, 'Name cannot exceed 100 characters'],
   },
+  email: {
+    type: String,
+    required: [true, 'Email is required'],
+    unique: true,
+    trim: true,
+    lowercase: true,
+    match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please enter a valid email address'],
+  },
   mobile: {
     type: String,
     required: [true, 'Mobile number is required'],
@@ -47,9 +55,18 @@ const userSchema = new mongoose.Schema({
     minlength: [6, 'Password must be at least 6 characters'],
     select: false,
   },
-  isMobileVerified: {
-    type: Boolean,
-    default: false,
+  resetPasswordToken: {
+    type: String,
+    select: false,
+  },
+  resetPasswordExpires: {
+    type: Date,
+    select: false,
+  },
+  resetPasswordAttempts: {
+    type: Number,
+    default: 0,
+    select: false,
   },
   avatar: {
     type: String,
@@ -79,13 +96,13 @@ userSchema.methods.toProfile = function () {
   return {
     _id: this._id,
     name: this.name,
+    email: this.email,
     mobile: this.mobile,
     age: this.age,
     role: this.role,
     studyOrPreparation: this.studyOrPreparation,
     institution: this.institution,
     experienceLevel: this.experienceLevel,
-    isMobileVerified: this.isMobileVerified,
     avatar: this.avatar,
     themePreference: this.themePreference,
     createdAt: this.createdAt,

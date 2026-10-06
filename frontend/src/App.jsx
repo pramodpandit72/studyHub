@@ -12,6 +12,7 @@ import { PageLoader } from './components/common/Loader';
 const Landing = lazy(() => import('./pages/Landing').then((m) => ({ default: m.Landing })));
 const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.Login })));
 const Signup = lazy(() => import('./pages/Signup').then((m) => ({ default: m.Signup })));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then((m) => ({ default: m.ForgotPassword })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Meetings = lazy(() => import('./pages/Meetings').then((m) => ({ default: m.Meetings })));
 const CreateMeeting = lazy(() => import('./pages/CreateMeeting').then((m) => ({ default: m.CreateMeeting })));
@@ -57,6 +58,14 @@ export default function App() {
                     element={
                       <PublicRoute>
                         <Signup />
+                      </PublicRoute>
+                    }
+                  />
+                  <Route
+                    path="/forgot-password"
+                    element={
+                      <PublicRoute>
+                        <ForgotPassword />
                       </PublicRoute>
                     }
                   />

@@ -1,165 +1,104 @@
+import crypto from 'crypto';
 import User from '../models/User.js';
-import otpService from '../services/otp.service.js';
+import emailService from '../services/email.service.js';
 import { generateToken } from '../middleware/auth.middleware.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import env from '../config/env.js';
 
+/**
+ * Register a new user
+ * Payload: { name, email, mobile, age, role, studyOrPreparation, institution, experienceLevel, password }
+ */
 export const signup = async (req, res) => {
   try {
-    const { name, mobile, age, role, studyOrPreparation, institution, experienceLevel, password } = req.body;
+    const { name, email, mobile, age, role, studyOrPreparation, institution, experienceLevel, password } = req.body;
 
-    if (!name || !mobile || !age || !role || !password) {
+    if (!name || !email || !mobile || !age || !role || !password) {
       return sendError(res, 400, 'Please fill all required fields.');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return sendError(res, 400, 'Please enter a valid email address.');
     }
 
     if (!/^\d{10}$/.test(mobile)) {
       return sendError(res, 400, 'Please enter a valid 10-digit mobile number.');
+    }
+
+    const ageNum = parseInt(age, 10);
+    if (isNaN(ageNum) || ageNum < 10 || ageNum > 120) {
+      return sendError(res, 400, 'Age must be between 10 and 120.');
     }
 
     if (password.length < 6) {
       return sendError(res, 400, 'Password must be at least 6 characters.');
     }
 
-    const existingUser = await User.findOne({ mobile });
-    if (existingUser) {
-      if (existingUser.isMobileVerified) {
-        return sendError(res, 400, 'An account with this mobile number already exists.');
-      }
-      // If user registered earlier but never verified OTP, update their details
-      existingUser.name = name;
-      existingUser.age = age;
-      existingUser.role = role;
-      existingUser.studyOrPreparation = studyOrPreparation || '';
-      existingUser.institution = institution || '';
-      existingUser.experienceLevel = experienceLevel || '';
-      existingUser.password = password;
-      await existingUser.save();
+    const normalizedEmail = email.toLowerCase().trim();
 
-      return sendSuccess(res, 200, 'Account details updated. Please verify your mobile number.', {
-        userId: existingUser._id,
-        mobile: existingUser.mobile,
-      });
+    // Check if email already registered
+    const existingEmailUser = await User.findOne({ email: normalizedEmail });
+    if (existingEmailUser) {
+      return sendError(res, 400, 'An account with this email address already exists.');
+    }
+
+    // Check if mobile number already registered
+    const existingMobileUser = await User.findOne({ mobile: mobile.trim() });
+    if (existingMobileUser) {
+      return sendError(res, 400, 'An account with this mobile number already exists.');
     }
 
     const user = await User.create({
-      name,
-      mobile,
-      age,
+      name: name.trim(),
+      email: normalizedEmail,
+      mobile: mobile.trim(),
+      age: ageNum,
       role,
-      studyOrPreparation: studyOrPreparation || '',
-      institution: institution || '',
-      experienceLevel: experienceLevel || '',
+      studyOrPreparation: studyOrPreparation ? studyOrPreparation.trim() : '',
+      institution: institution ? institution.trim() : '',
+      experienceLevel: experienceLevel ? experienceLevel.trim() : '',
       password,
     });
 
-    return sendSuccess(res, 201, 'Account created. Please verify your mobile number.', {
-      userId: user._id,
-      mobile: user.mobile,
+    const token = generateToken(user._id);
+
+    return sendSuccess(res, 201, 'Account created successfully.', {
+      token,
+      user: user.toProfile(),
     });
   } catch (error) {
     console.error('Signup error:', error);
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0] || 'Email or Mobile';
+      return sendError(res, 400, `An account with this ${field} already exists.`);
+    }
     return sendError(res, 500, 'Registration failed. Please try again.');
   }
 };
 
-export const sendOtp = async (req, res) => {
-  try {
-    const { mobile, type } = req.body;
-
-    if (!mobile || !type) {
-      return sendError(res, 400, 'Mobile number and OTP type are required.');
-    }
-
-    if (!/^\d{10}$/.test(mobile)) {
-      return sendError(res, 400, 'Please enter a valid 10-digit mobile number.');
-    }
-
-    if (!['signup', 'login'].includes(type)) {
-      return sendError(res, 400, 'Invalid OTP type.');
-    }
-
-    if (type === 'login') {
-      const user = await User.findOne({ mobile }).lean();
-      if (!user) {
-        return sendError(res, 404, 'No account found with this mobile number.');
-      }
-    }
-
-    const { canResend, remainingSeconds } = await otpService.canResend(mobile, type);
-    if (!canResend) {
-      return sendError(res, 429, `Please wait ${remainingSeconds} seconds before requesting a new OTP.`);
-    }
-
-    const result = await otpService.generateAndSend(mobile, type);
-
-    const responseData = { sent: true };
-    if (result.devOtp) {
-      responseData.devOtp = result.devOtp;
-    }
-
-    return sendSuccess(res, 200, 'OTP sent successfully.', responseData);
-  } catch (error) {
-    console.error('Send OTP error:', error);
-    return sendError(res, 500, 'Failed to send OTP. Please try again.');
-  }
-};
-
-export const verifyOtp = async (req, res) => {
-  try {
-    const { mobile, otp, type } = req.body;
-
-    if (!mobile || !otp || !type) {
-      return sendError(res, 400, 'Mobile number, OTP, and type are required.');
-    }
-
-    const result = await otpService.verify(mobile, otp, type);
-
-    if (!result.valid) {
-      return sendError(res, 400, result.message);
-    }
-
-    if (type === 'signup') {
-      await User.findOneAndUpdate({ mobile }, { isMobileVerified: true });
-      const user = await User.findOne({ mobile });
-      const token = generateToken(user._id);
-
-      return sendSuccess(res, 200, 'Mobile verified successfully.', {
-        token,
-        user: user.toProfile(),
-      });
-    }
-
-    return sendSuccess(res, 200, 'OTP verified successfully.');
-  } catch (error) {
-    console.error('Verify OTP error:', error);
-    return sendError(res, 500, 'OTP verification failed. Please try again.');
-  }
-};
-
+/**
+ * Login with Email and Password
+ * Payload: { email, password }
+ */
 export const login = async (req, res) => {
   try {
-    const { mobile, otp } = req.body;
+    const { email, password } = req.body;
 
-    if (!mobile || !otp) {
-      return sendError(res, 400, 'Mobile number and OTP are required.');
+    if (!email || !password) {
+      return sendError(res, 400, 'Email and password are required.');
     }
 
-    if (!/^\d{10}$/.test(mobile)) {
-      return sendError(res, 400, 'Please enter a valid 10-digit mobile number.');
-    }
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail }).select('+password');
 
-    const user = await User.findOne({ mobile });
     if (!user) {
-      return sendError(res, 404, 'No account found with this mobile number.');
+      return sendError(res, 401, 'Invalid email or password.');
     }
 
-    const result = await otpService.verify(mobile, otp, 'login');
-    if (!result.valid) {
-      return sendError(res, 400, result.message);
-    }
-
-    if (!user.isMobileVerified) {
-      user.isMobileVerified = true;
-      await user.save();
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return sendError(res, 401, 'Invalid email or password.');
     }
 
     const token = generateToken(user._id);
@@ -174,11 +113,178 @@ export const login = async (req, res) => {
   }
 };
 
+/**
+ * Forgot Password - Send Reset Code to Email
+ * Payload: { email }
+ */
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return sendError(res, 400, 'Please enter your email address.');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return sendError(res, 400, 'Please enter a valid email address.');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
+
+    if (!user) {
+      return sendError(res, 404, 'No account found with this email address.');
+    }
+
+    // Generate secure 6-digit numeric reset code
+    const resetCode = crypto.randomInt(100000, 1000000).toString();
+
+    // Hash the code for secure database storage
+    const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
+
+    const expiryMinutes = env.RESET_TOKEN_EXPIRY_MINUTES || 15;
+    user.resetPasswordToken = hashedCode;
+    user.resetPasswordExpires = new Date(Date.now() + expiryMinutes * 60 * 1000);
+    user.resetPasswordAttempts = 0;
+    await user.save();
+
+    // Send reset email via EmailJS
+    await emailService.sendPasswordResetEmail({
+      toEmail: user.email,
+      toName: user.name,
+      resetCode,
+    });
+
+    const responseData = { sent: true, email: user.email };
+    if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
+      responseData.devCode = resetCode;
+    }
+
+    return sendSuccess(res, 200, 'A password reset code has been sent to your email address.', responseData);
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    return sendError(res, 500, 'Failed to process password reset request. Please try again.');
+  }
+};
+
+/**
+ * Verify Reset Code
+ * Payload: { email, code }
+ */
+export const verifyResetCode = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return sendError(res, 400, 'Email and reset code are required.');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail }).select('+resetPasswordToken +resetPasswordExpires +resetPasswordAttempts');
+
+    if (!user) {
+      return sendError(res, 404, 'No account found with this email address.');
+    }
+
+    if (!user.resetPasswordToken || !user.resetPasswordExpires) {
+      return sendError(res, 400, 'No active password reset request found. Please request a new code.');
+    }
+
+    if (user.resetPasswordExpires < new Date()) {
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+      return sendError(res, 400, 'The reset code has expired. Please request a new one.');
+    }
+
+    if (user.resetPasswordAttempts >= 5) {
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+      return sendError(res, 429, 'Too many incorrect attempts. Please request a new reset code.');
+    }
+
+    const candidateHash = crypto.createHash('sha256').update(code.trim()).digest('hex');
+    if (candidateHash !== user.resetPasswordToken) {
+      user.resetPasswordAttempts += 1;
+      await user.save();
+      return sendError(res, 400, 'Invalid reset code. Please check your email and try again.');
+    }
+
+    return sendSuccess(res, 200, 'Reset code verified successfully.');
+  } catch (error) {
+    console.error('Verify reset code error:', error);
+    return sendError(res, 500, 'Failed to verify reset code. Please try again.');
+  }
+};
+
+/**
+ * Reset Password
+ * Payload: { email, code, newPassword }
+ */
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      return sendError(res, 400, 'Email, reset code, and new password are required.');
+    }
+
+    if (newPassword.length < 6) {
+      return sendError(res, 400, 'Password must be at least 6 characters.');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail }).select('+password +resetPasswordToken +resetPasswordExpires +resetPasswordAttempts');
+
+    if (!user) {
+      return sendError(res, 404, 'No account found with this email address.');
+    }
+
+    if (!user.resetPasswordToken || !user.resetPasswordExpires) {
+      return sendError(res, 400, 'No active password reset request found. Please request a new code.');
+    }
+
+    if (user.resetPasswordExpires < new Date()) {
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+      return sendError(res, 400, 'The reset code has expired. Please request a new one.');
+    }
+
+    const candidateHash = crypto.createHash('sha256').update(code.trim()).digest('hex');
+    if (candidateHash !== user.resetPasswordToken) {
+      user.resetPasswordAttempts += 1;
+      await user.save();
+      return sendError(res, 400, 'Invalid reset code. Please check your email and try again.');
+    }
+
+    // Set new password (will be hashed in User pre-save hook)
+    user.password = newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    user.resetPasswordAttempts = 0;
+    await user.save();
+
+    return sendSuccess(res, 200, 'Password updated successfully. You can now log in with your new password.');
+  } catch (error) {
+    console.error('Reset password error:', error);
+    return sendError(res, 500, 'Failed to reset password. Please try again.');
+  }
+};
+
+/**
+ * Logout
+ */
 export const logout = async (req, res) => {
   res.clearCookie('token');
   return sendSuccess(res, 200, 'Logged out successfully.');
 };
 
+/**
+ * Get current authenticated user
+ */
 export const getMe = async (req, res) => {
   try {
     return sendSuccess(res, 200, 'User fetched.', { user: req.user.toProfile() });

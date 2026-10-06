@@ -16,10 +16,10 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-export const otpLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000,
-  max: process.env.NODE_ENV === 'test' ? 1000 : 30,
-  message: { success: false, message: 'Too many OTP requests. Please try again later.' },
+export const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 10,
+  message: { success: false, message: 'Too many password reset requests. Please wait a few minutes before trying again.' },
   standardHeaders: true,
   legacyHeaders: false,
 });

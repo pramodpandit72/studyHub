@@ -133,10 +133,15 @@ export const Profile = () => {
 
             <div className="mt-4 pt-4 border-t border-border-color w-full text-left space-y-2 text-xs">
               <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Email:</span>
+                <span className="text-text-primary font-medium truncate max-w-[150px]" title={user?.email}>
+                  {user?.email || '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-text-secondary">Mobile:</span>
-                <span className="font-mono text-text-primary font-medium flex items-center gap-1">
+                <span className="font-mono text-text-primary font-medium">
                   +91 {user?.mobile}
-                  <ShieldCheck size={13} className="text-text-primary" title="Verified" />
                 </span>
               </div>
               <div className="flex items-center justify-between">

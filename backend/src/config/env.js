@@ -6,13 +6,14 @@ const env = {
   MONGO_URI: process.env.MONGO_URI || 'mongodb://localhost:27017/vimeet',
   JWT_SECRET: process.env.JWT_SECRET || 'dev_secret_change_in_production',
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:5173',
-  OTP_PROVIDER: process.env.OTP_PROVIDER || 'development',
-  OTP_API_KEY: process.env.OTP_API_KEY || '',
   NODE_ENV: process.env.NODE_ENV || 'development',
   JWT_EXPIRES_IN: '7d',
-  OTP_EXPIRY_MINUTES: 5,
-  OTP_MAX_ATTEMPTS: 5,
-  OTP_RESEND_COOLDOWN_SECONDS: 60,
+  RESET_TOKEN_EXPIRY_MINUTES: 15,
+  EMAILJS_SERVICE_ID: process.env.EMAILJS_SERVICE_ID || '',
+  EMAILJS_TEMPLATE_ID: process.env.EMAILJS_TEMPLATE_ID || '',
+  EMAILJS_PUBLIC_KEY: process.env.EMAILJS_PUBLIC_KEY || '',
+  EMAILJS_PRIVATE_KEY: process.env.EMAILJS_PRIVATE_KEY || '',
 };
 
 export default env;
+

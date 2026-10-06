@@ -2,9 +2,10 @@ import api from './api';
 
 export const authApi = {
   signup: (data) => api.post('/auth/signup', data),
-  sendOtp: (mobile, type) => api.post('/auth/send-otp', { mobile, type }),
-  verifyOtp: (mobile, otp, type) => api.post('/auth/verify-otp', { mobile, otp, type }),
-  login: (mobile, otp) => api.post('/auth/login', { mobile, otp }),
+  login: (email, password) => api.post('/auth/login', { email, password }),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  verifyResetCode: (email, code) => api.post('/auth/verify-reset-code', { email, code }),
+  resetPassword: (email, code, newPassword) => api.post('/auth/reset-password', { email, code, newPassword }),
   logout: () => api.post('/auth/logout'),
   getMe: () => api.get('/auth/me'),
 };

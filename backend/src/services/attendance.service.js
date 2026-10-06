@@ -49,7 +49,7 @@ const attendanceService = {
 
   async getMeetingAttendance(meetingId) {
     return Attendance.find({ meeting: meetingId })
-      .populate('user', 'name mobile role')
+      .populate('user', 'name email role')
       .sort({ joinedAt: 1 })
       .lean();
   },

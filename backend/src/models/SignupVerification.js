@@ -14,7 +14,6 @@ const signupVerificationSchema = new mongoose.Schema({
   },
   signupData: {
     name: { type: String, required: true },
-    mobile: { type: String, required: true },
     age: { type: Number, required: true },
     role: { type: String, required: true },
     studyOrPreparation: { type: String, default: '' },

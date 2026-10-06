@@ -83,7 +83,7 @@ export const Attendance = () => {
 
   const filteredRecords = attendanceRecords.filter((rec) =>
     rec.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    rec.user?.mobile?.includes(searchTerm)
+    rec.user?.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const formatDateTime = (dateStr) => {
@@ -247,7 +247,7 @@ export const Attendance = () => {
                       <tr key={rec._id} className="hover:bg-surface-50 dark:hover:bg-surface-800/50">
                         <td className="py-3 px-4">
                           <span className="font-semibold text-text-primary">{rec.user?.name || 'User'}</span>
-                          <span className="block text-[11px] text-text-secondary">{rec.user?.mobile}</span>
+                          <span className="block text-[11px] text-text-secondary">{rec.user?.email}</span>
                         </td>
                         <td className="py-3 px-4 text-text-secondary capitalize">{rec.user?.role || 'Student'}</td>
                         <td className="py-3 px-4 text-text-secondary">{formatDateTime(rec.joinedAt)}</td>

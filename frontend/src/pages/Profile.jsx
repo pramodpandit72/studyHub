@@ -139,12 +139,6 @@ export const Profile = () => {
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-text-secondary">Mobile:</span>
-                <span className="font-mono text-text-primary font-medium">
-                  +91 {user?.mobile}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
                 <span className="text-text-secondary">Member Since:</span>
                 <span className="text-text-primary font-medium">{formatDate(user?.createdAt)}</span>
               </div>

@@ -6,7 +6,6 @@ import { ButtonLoader } from '../components/common/Loader';
 import {
   User,
   Mail,
-  Smartphone,
   Calendar,
   Briefcase,
   GraduationCap,
@@ -56,7 +55,6 @@ export const Signup = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    mobile: '',
     age: '',
     role: 'Student',
     studyOrPreparation: 'B.Tech',
@@ -81,7 +79,7 @@ export const Signup = () => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === 'mobile' ? value.replace(/\D/g, '') : value,
+      [name]: value,
     }));
   };
 
@@ -91,9 +89,6 @@ export const Signup = () => {
     if (!formData.email.trim()) return 'Please enter your email address.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       return 'Please enter a valid email address.';
-    }
-    if (!/^\d{10}$/.test(formData.mobile)) {
-      return 'Please enter a valid 10-digit mobile number.';
     }
     const ageNum = parseInt(formData.age, 10);
     if (!ageNum || ageNum < 10 || ageNum > 120) {
@@ -143,7 +138,6 @@ export const Signup = () => {
         const { data } = await authApi.signup({
           name: formData.name.trim(),
           email: formData.email.trim().toLowerCase(),
-          mobile: formData.mobile.trim(),
           age: parseInt(formData.age, 10),
           role: formData.role,
           studyOrPreparation: formData.studyOrPreparation,
@@ -159,7 +153,7 @@ export const Signup = () => {
         setCountdown(60);
         setCurrentStep(4);
       } catch (err) {
-        const msg = err.response?.data?.message || 'Registration failed. Email or mobile may already be registered.';
+        const msg = err.response?.data?.message || 'Registration failed. Email may already be registered.';
         setErrorMsg(msg);
         error(msg);
       } finally {
@@ -347,29 +341,6 @@ export const Signup = () => {
                 <p className="text-[11px] text-text-secondary mt-1">
                   A 4-digit verification OTP will be sent to this email via EmailJS.
                 </p>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="mobile">
-                  Mobile Number <span className="text-text-primary">*</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-tertiary">
-                    <span className="text-xs font-semibold mr-1">+91</span>
-                    <Smartphone size={16} />
-                  </div>
-                  <input
-                    id="mobile"
-                    name="mobile"
-                    type="tel"
-                    required
-                    maxLength={10}
-                    placeholder="Enter mobile no."
-                    value={formData.mobile}
-                    onChange={handleChange}
-                    className="input-field pl-16 font-mono text-sm"
-                  />
-                </div>
               </div>
 
               <div>

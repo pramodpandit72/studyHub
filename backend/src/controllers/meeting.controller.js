@@ -53,7 +53,7 @@ export const createMeeting = async (req, res) => {
       await meeting.save();
     }
 
-    await meeting.populate('host', 'name mobile role');
+    await meeting.populate('host', 'name email role');
 
     return sendSuccess(res, 201, 'Meeting created successfully.', { meeting });
   } catch (error) {
@@ -99,7 +99,7 @@ export const getMeetings = async (req, res) => {
 export const getMeetingById = async (req, res) => {
   try {
     const meeting = await Meeting.findById(req.params.id)
-      .populate('host', 'name mobile role')
+      .populate('host', 'name email role')
       .populate('participants.user', 'name role');
 
     if (!meeting) {

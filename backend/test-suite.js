@@ -22,6 +22,15 @@ const runTests = async () => {
   await mongoose.connect(env.MONGO_URI, { dbName: 'vimeet' });
   console.log(`[DB] Connected to MongoDB database: ${mongoose.connection.name}`);
 
+  try {
+    const usersCol = mongoose.connection.collection('users');
+    const indexes = await usersCol.indexes();
+    if (indexes.some((idx) => idx.name === 'mobile_1')) {
+      await usersCol.dropIndex('mobile_1');
+      console.log('[DB] Dropped legacy unique index mobile_1');
+    }
+  } catch {}
+
   // Start server on an ephemeral port
   server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, resolve));
@@ -57,16 +66,11 @@ const runTests = async () => {
 
   try {
     const testEmailA = 'ramesh.instructor@example.com';
-    const testMobileA = '9998881111';
     const testEmailB = 'priya.student@example.com';
-    const testMobileB = '9998882222';
 
     // Clean up test data
     await User.deleteMany({
-      $or: [
-        { email: { $in: [testEmailA, testEmailB] } },
-        { mobile: { $in: [testMobileA, testMobileB] } },
-      ],
+      email: { $in: [testEmailA, testEmailB] },
     });
     await SignupVerification.deleteMany({
       email: { $in: [testEmailA, testEmailB] },
@@ -81,40 +85,26 @@ const runTests = async () => {
     res = await req('/auth/signup', 'POST', {
       name: 'Test User',
       email: 'invalid-email',
-      mobile: '9876543210',
       age: 22,
       role: 'Student',
       password: 'password123',
     });
     assert(res.status === 400, 'Signup rejects invalid email format (HTTP 400)');
 
-    // 1.3 Signup Validation: invalid mobile
-    res = await req('/auth/signup', 'POST', {
-      name: 'Test User',
-      email: 'test@example.com',
-      mobile: '123',
-      age: 22,
-      role: 'Student',
-      password: 'password123',
-    });
-    assert(res.status === 400, 'Signup rejects invalid 10-digit mobile (HTTP 400)');
-
-    // 1.4 Signup Validation: short password
+    // 1.3 Signup Validation: short password
     res = await req('/auth/signup', 'POST', {
       name: 'User A',
       email: testEmailA,
-      mobile: testMobileA,
       age: 25,
       role: 'Teacher',
       password: '123',
     });
     assert(res.status === 400, 'Signup rejects passwords < 6 characters (HTTP 400)');
 
-    // 1.5 Valid Signup Initiation for User A (Sends 4-digit OTP via EmailJS)
+    // 1.4 Valid Signup Initiation for User A (Sends 4-digit OTP via EmailJS)
     res = await req('/auth/signup', 'POST', {
       name: 'Instructor Ramesh',
       email: testEmailA,
-      mobile: testMobileA,
       age: 32,
       role: 'Teacher',
       studyOrPreparation: 'Computer Science',
@@ -126,55 +116,42 @@ const runTests = async () => {
     const devOtpA = res.data.data?.devOtp;
     assert(typeof devOtpA === 'string' && devOtpA.length === 4, '4-digit OTP generated for verification');
 
-    // 1.6 Verify User account does NOT exist in DB prior to OTP verification
+    // 1.5 Verify User account does NOT exist in DB prior to OTP verification
     const unverifiedUserDoc = await User.findOne({ email: testEmailA });
     assert(unverifiedUserDoc === null, 'User account is NOT created in DB before OTP is verified');
 
-    // 1.7 Attempting to login before OTP verification fails
+    // 1.6 Attempting to login before OTP verification fails
     res = await req('/auth/login', 'POST', { email: testEmailA, password: 'password123' });
     assert(res.status === 401, 'Login fails for unverified user (HTTP 401)');
 
-    // 1.8 Verify OTP with incorrect code fails
+    // 1.7 Verify OTP with incorrect code fails
     res = await req('/auth/signup/verify', 'POST', { email: testEmailA, otp: '0000' });
     assert(res.status === 400 && !res.data.success, 'Verify signup OTP rejects incorrect OTP (HTTP 400)');
 
-    // 1.9 Verify OTP with valid 4-digit code creates account
+    // 1.8 Verify OTP with valid 4-digit code creates account
     res = await req('/auth/signup/verify', 'POST', { email: testEmailA, otp: devOtpA });
     assert(res.status === 201 && res.data.success && res.data.data?.user?.email === testEmailA, 'Verify signup OTP activates account and creates User (HTTP 201)');
 
-    // 1.10 User is now in DB and SignupVerification record is removed
+    // 1.9 User is now in DB and SignupVerification record is removed
     const createdUserDoc = await User.findOne({ email: testEmailA });
     assert(createdUserDoc !== null && createdUserDoc.email === testEmailA, 'User is now stored in database');
     const pendingRecord = await SignupVerification.findOne({ email: testEmailA });
     assert(pendingRecord === null, 'Pending signup verification record is cleaned up');
 
-    // 1.11 Duplicate email signup rejected
+    // 1.10 Duplicate email signup rejected
     res = await req('/auth/signup', 'POST', {
       name: 'Duplicate Email User',
       email: testEmailA,
-      mobile: '9998889999',
       age: 24,
       role: 'Student',
       password: 'password123',
     });
     assert(res.status === 400 && res.data.message.includes('email'), 'Signup rejects already registered email (HTTP 400)');
 
-    // 1.12 Duplicate mobile signup rejected
-    res = await req('/auth/signup', 'POST', {
-      name: 'Duplicate Mobile User',
-      email: 'another@example.com',
-      mobile: testMobileA,
-      age: 24,
-      role: 'Student',
-      password: 'password123',
-    });
-    assert(res.status === 400 && res.data.message.includes('mobile'), 'Signup rejects already registered mobile number (HTTP 400)');
-
-    // 1.13 Signup User B (Student) with Email OTP verification
+    // 1.11 Signup User B (Student) with Email OTP verification
     res = await req('/auth/signup', 'POST', {
       name: 'Student Priya',
       email: testEmailB,
-      mobile: testMobileB,
       age: 21,
       role: 'Student',
       studyOrPreparation: 'B.Tech',
@@ -392,10 +369,7 @@ const runTests = async () => {
     await Meeting.deleteMany({ _id: meetingIdA });
     await Attendance.deleteMany({ meeting: meetingIdA });
     await User.deleteMany({
-      $or: [
-        { email: { $in: [testEmailA, testEmailB] } },
-        { mobile: { $in: [testMobileA, testMobileB] } },
-      ],
+      email: { $in: [testEmailA, testEmailB] },
     });
     await SignupVerification.deleteMany({
       email: { $in: [testEmailA, testEmailB] },

@@ -171,7 +171,7 @@ export const Navbar = () => {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-text-primary">{user?.name}</p>
-                  <p className="text-xs text-text-secondary">{user?.role} • {user?.mobile}</p>
+                  <p className="text-xs text-text-secondary">{user?.role} • {user?.email}</p>
                 </div>
               </div>
 

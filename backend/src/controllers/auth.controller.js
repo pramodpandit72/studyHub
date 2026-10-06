@@ -8,23 +8,19 @@ import env from '../config/env.js';
 
 /**
  * Initiate signup: Validate details, store pending registration, send 4-digit email OTP via EmailJS
- * Payload: { name, email, mobile, age, role, studyOrPreparation, institution, experienceLevel, password }
+ * Payload: { name, email, age, role, studyOrPreparation, institution, experienceLevel, password }
  */
 export const signup = async (req, res) => {
   try {
-    const { name, email, mobile, age, role, studyOrPreparation, institution, experienceLevel, password } = req.body;
+    const { name, email, age, role, studyOrPreparation, institution, experienceLevel, password } = req.body;
 
-    if (!name || !email || !mobile || !age || !role || !password) {
+    if (!name || !email || !age || !role || !password) {
       return sendError(res, 400, 'Please fill all required fields.');
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return sendError(res, 400, 'Please enter a valid email address.');
-    }
-
-    if (!/^\d{10}$/.test(mobile)) {
-      return sendError(res, 400, 'Please enter a valid 10-digit mobile number.');
     }
 
     const ageNum = parseInt(age, 10);
@@ -37,18 +33,11 @@ export const signup = async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const normalizedMobile = mobile.trim();
 
     // Check if email already registered in activated User accounts
     const existingEmailUser = await User.findOne({ email: normalizedEmail });
     if (existingEmailUser) {
       return sendError(res, 400, 'An account with this email address already exists.');
-    }
-
-    // Check if mobile already registered in activated User accounts
-    const existingMobileUser = await User.findOne({ mobile: normalizedMobile });
-    if (existingMobileUser) {
-      return sendError(res, 400, 'An account with this mobile number already exists.');
     }
 
     // Generate secure 4-digit OTP
@@ -64,7 +53,6 @@ export const signup = async (req, res) => {
       otpHash,
       signupData: {
         name: name.trim(),
-        mobile: normalizedMobile,
         age: ageNum,
         role,
         studyOrPreparation: studyOrPreparation ? studyOrPreparation.trim() : '',
@@ -185,19 +173,16 @@ export const verifySignupOtp = async (req, res) => {
     }
 
     // Verify uniqueness again to prevent race condition
-    const conflict = await User.findOne({
-      $or: [{ email: normalizedEmail }, { mobile: record.signupData.mobile }],
-    });
+    const conflict = await User.findOne({ email: normalizedEmail });
     if (conflict) {
       await SignupVerification.deleteOne({ _id: record._id });
-      return sendError(res, 400, 'An account with this email or mobile already exists.');
+      return sendError(res, 400, 'An account with this email address already exists.');
     }
 
     // Create the user in the database now that OTP is verified
     const user = await User.create({
       name: record.signupData.name,
       email: normalizedEmail,
-      mobile: record.signupData.mobile,
       age: record.signupData.age,
       role: record.signupData.role,
       studyOrPreparation: record.signupData.studyOrPreparation,
@@ -215,7 +200,7 @@ export const verifySignupOtp = async (req, res) => {
   } catch (error) {
     console.error('Verify signup OTP error:', error);
     if (error.code === 11000) {
-      return sendError(res, 400, 'An account with this email or mobile already exists.');
+      return sendError(res, 400, 'An account with this email address already exists.');
     }
     return sendError(res, 500, 'Account verification failed. Please try again.');
   }

@@ -40,8 +40,8 @@ export const signup = async (req, res) => {
       return sendError(res, 400, 'An account with this email address already exists.');
     }
 
-    // Generate secure 4-digit OTP
-    const otp = crypto.randomInt(1000, 10000).toString();
+    // Generate secure 6-digit OTP
+    const otp = crypto.randomInt(100000, 1000000).toString();
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
 
     // Remove any previous pending registration for this email
@@ -110,8 +110,8 @@ export const resendSignupOtp = async (req, res) => {
       return sendError(res, 429, `Please wait ${waitSeconds} seconds before requesting a new OTP.`);
     }
 
-    // Generate new 4-digit OTP
-    const otp = crypto.randomInt(1000, 10000).toString();
+    // Generate new 6-digit OTP
+    const otp = crypto.randomInt(100000, 1000000).toString();
     record.otpHash = crypto.createHash('sha256').update(otp).digest('hex');
     record.expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     record.attempts = 0;

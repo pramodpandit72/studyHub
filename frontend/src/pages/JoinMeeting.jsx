@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { meetingApi } from '../services/meeting.api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { useTheme } from '../context/ThemeContext';
 import { PageLoader, ButtonLoader } from '../components/common/Loader';
 import {
   Mic,
@@ -14,8 +13,6 @@ import {
   ShieldCheck,
   LogIn,
   ArrowLeft,
-  Sun,
-  Moon
 } from 'lucide-react';
 
 export const JoinMeeting = () => {
@@ -23,7 +20,6 @@ export const JoinMeeting = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { error } = useToast();
-  const { theme, toggleTheme } = useTheme();
 
   const [meeting, setMeeting] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -122,16 +118,6 @@ export const JoinMeeting = () => {
         >
           <ArrowLeft size={15} />
           <span>← Back to Meetings</span>
-        </button>
-
-        <button
-          onClick={toggleTheme}
-          className="btn btn-secondary btn-sm flex items-center gap-1.5"
-          title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
-          aria-label="Toggle theme"
-        >
-          {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-          <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
         </button>
       </div>
 

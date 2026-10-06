@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { useTheme } from '../context/ThemeContext';
 import { userApi } from '../services/auth.api';
 import { ButtonLoader } from '../components/common/Loader';
 import {
@@ -13,8 +12,6 @@ import {
   Building,
   ShieldCheck,
   Save,
-  Sun,
-  Moon,
   ArrowLeft
 } from 'lucide-react';
 
@@ -30,7 +27,6 @@ const ROLES = [
 export const Profile = () => {
   const { user, updateUser } = useAuth();
   const { success, error } = useToast();
-  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
@@ -143,21 +139,6 @@ export const Profile = () => {
                 <span className="text-text-primary font-medium">{formatDate(user?.createdAt)}</span>
               </div>
             </div>
-          </div>
-
-          {/* Theme Preference Quick Switch */}
-          <div className="card p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-text-primary">Display Theme</p>
-              <p className="text-[11px] text-text-secondary capitalize">{theme} Mode Active</p>
-            </div>
-            <button
-              onClick={toggleTheme}
-              className="btn btn-secondary btn-sm flex items-center gap-1.5"
-            >
-              {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-              <span>{theme === 'light' ? 'Dark' : 'Light'}</span>
-            </button>
           </div>
         </div>
 

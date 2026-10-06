@@ -1,9 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, X, MessageSquare, Sun, Moon } from 'lucide-react';
-import { useTheme } from '../../context/ThemeContext';
+import { Send, X, MessageSquare } from 'lucide-react';
 
 export const ChatPanel = ({ isOpen, onClose, messages = [], onSendMessage, currentUserId }) => {
-  const { theme, toggleTheme } = useTheme();
   const [text, setText] = useState('');
   const messagesEndRef = useRef(null);
 
@@ -43,23 +41,13 @@ export const ChatPanel = ({ isOpen, onClose, messages = [], onSendMessage, curre
           <MessageSquare size={18} className="text-text-primary" />
           <h3 className="text-sm font-semibold text-text-primary">Meeting Chat</h3>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={toggleTheme}
-            className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-100 dark:hover:bg-surface-800 transition"
-            title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-          </button>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-100 dark:hover:bg-surface-800 transition"
-            aria-label="Close chat"
-          >
-            <X size={18} />
-          </button>
-        </div>
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-100 dark:hover:bg-surface-800 transition"
+          aria-label="Close chat"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       {/* Messages List */}

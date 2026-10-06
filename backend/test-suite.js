@@ -112,9 +112,9 @@ const runTests = async () => {
       experienceLevel: 'Advanced',
       password: 'password123',
     });
-    assert(res.status === 200 && res.data.success && res.data.data?.sent, 'Signup initiation sends 4-digit OTP to email (HTTP 200)');
+    assert(res.status === 200 && res.data.success && res.data.data?.sent, 'Signup initiation sends 6-digit OTP to email (HTTP 200)');
     const devOtpA = res.data.data?.devOtp;
-    assert(typeof devOtpA === 'string' && devOtpA.length === 4, '4-digit OTP generated for verification');
+    assert(typeof devOtpA === 'string' && devOtpA.length === 6, '6-digit OTP generated for verification');
 
     // 1.5 Verify User account does NOT exist in DB prior to OTP verification
     const unverifiedUserDoc = await User.findOne({ email: testEmailA });

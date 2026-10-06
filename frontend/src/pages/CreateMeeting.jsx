@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { meetingApi } from '../services/meeting.api';
 import { useToast } from '../context/ToastContext';
-import { useTheme } from '../context/ThemeContext';
 import { ButtonLoader } from '../components/common/Loader';
 import {
   Video,
@@ -12,8 +11,6 @@ import {
   ArrowRight,
   ArrowLeft,
   Sliders,
-  Sun,
-  Moon
 } from 'lucide-react';
 
 export const CreateMeeting = () => {
@@ -22,7 +19,6 @@ export const CreateMeeting = () => {
 
   const navigate = useNavigate();
   const { success, error } = useToast();
-  const { theme, toggleTheme } = useTheme();
 
   const [loading, setLoading] = useState(false);
   const [meetingType, setMeetingType] = useState(initialType);
@@ -104,16 +100,6 @@ export const CreateMeeting = () => {
         >
           <ArrowLeft size={15} />
           <span>← Back</span>
-        </button>
-
-        <button
-          onClick={toggleTheme}
-          className="btn btn-secondary btn-sm flex items-center gap-1.5"
-          title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
-          aria-label="Toggle theme"
-        >
-          {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-          <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
         </button>
       </div>
 

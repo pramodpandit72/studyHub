@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { useTheme } from '../context/ThemeContext';
 import { meetingApi } from '../services/meeting.api';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { EmptyState } from '../components/common/EmptyState';
@@ -18,14 +17,11 @@ import {
   Share2,
   Play,
   ArrowLeft,
-  Sun,
-  Moon
 } from 'lucide-react';
 
 export const Meetings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'upcoming';
-  const { theme, toggleTheme } = useTheme();
 
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -129,15 +125,6 @@ export const Meetings = () => {
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            onClick={toggleTheme}
-            className="btn btn-secondary btn-sm flex items-center gap-1.5"
-            title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-            <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
-          </button>
           <Link to="/meetings/create" className="btn btn-primary btn-sm flex items-center gap-1.5">
             <PlusCircle size={16} />
             <span>Create Meeting</span>

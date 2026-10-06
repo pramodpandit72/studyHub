@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, CheckCircle, Clock, Sun, Moon } from 'lucide-react';
+import { ArrowLeft, MessageSquare, CheckCircle, Clock } from 'lucide-react';
 import { submitFeedback, getMyFeedback } from '../services/feedback.api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { useTheme } from '../context/ThemeContext';
 
 const RATINGS = ['Very Good', 'Good', 'Okay', 'Poor', 'Very Poor'];
 const CATEGORIES = ['Website', 'Meeting', 'Login/Signup', 'Video/Audio', 'Other'];
@@ -13,7 +12,6 @@ export const Feedback = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { success, error } = useToast();
-  const { theme, toggleTheme } = useTheme();
 
   const [rating, setRating] = useState('Very Good');
   const [category, setCategory] = useState('Website');
@@ -82,7 +80,7 @@ export const Feedback = () => {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      {/* Top Bar: Back Button & Theme Toggle */}
+      {/* Top Bar: Back Button */}
       <div className="mb-6 flex items-center justify-between">
         <button
           onClick={() => navigate(-1)}
@@ -91,16 +89,6 @@ export const Feedback = () => {
         >
           <ArrowLeft size={16} />
           <span>← Back</span>
-        </button>
-
-        <button
-          onClick={toggleTheme}
-          className="btn btn-secondary btn-sm flex items-center gap-1.5"
-          title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
-          aria-label="Toggle theme"
-        >
-          {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-          <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
         </button>
       </div>
 

@@ -4,13 +4,10 @@ import { attendanceApi, meetingApi } from '../services/meeting.api';
 import { EmptyState } from '../components/common/EmptyState';
 import { PageLoader } from '../components/common/Loader';
 import { useToast } from '../context/ToastContext';
-import { useTheme } from '../context/ThemeContext';
 import {
   ClipboardList,
   Search,
   ArrowLeft,
-  Sun,
-  Moon
 } from 'lucide-react';
 
 export const Attendance = () => {
@@ -19,7 +16,6 @@ export const Attendance = () => {
   const navigate = useNavigate();
 
   const { error } = useToast();
-  const { theme, toggleTheme } = useTheme();
 
   const [meetings, setMeetings] = useState([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState(meetingIdParam || '');
@@ -121,18 +117,8 @@ export const Attendance = () => {
           </p>
         </div>
 
-        {/* Theme Toggle & View Toggle */}
+        {/* View Toggle */}
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          <button
-            onClick={toggleTheme}
-            className="btn btn-secondary btn-sm flex items-center gap-1.5"
-            title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-            <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
-          </button>
-
           <div className="flex items-center gap-1 p-1 bg-surface-100 dark:bg-surface-800 rounded-lg border border-border-color">
             <button
               onClick={() => setActiveTab('host')}

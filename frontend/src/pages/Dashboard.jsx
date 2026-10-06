@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { meetingApi } from '../services/meeting.api';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { EmptyState } from '../components/common/EmptyState';
@@ -15,15 +14,12 @@ import {
   Copy,
   Check,
   ArrowRight,
-  Sun,
-  Moon
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
 export const Dashboard = () => {
   const { user } = useAuth();
   const { success } = useToast();
-  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const [upcomingMeetings, setUpcomingMeetings] = useState([]);
@@ -101,19 +97,8 @@ export const Dashboard = () => {
           </p>
         </div>
 
-        {/* Quick Actions & Theme Toggle */}
+        {/* Quick Actions */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Theme Toggle Button */}
-          <button
-            onClick={toggleTheme}
-            className="btn btn-secondary btn-sm h-9 flex items-center gap-1.5"
-            title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-            <span className="hidden sm:inline">{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
-          </button>
-
           {/* Quick Join Input */}
           <form onSubmit={handleJoinByCode} className="flex items-center gap-2">
             <input

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { authApi } from '../services/auth.api';
@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   RotateCw,
   CheckCircle2,
+  Check,
 } from 'lucide-react';
 
 const ROLES = [
@@ -47,8 +48,10 @@ export const Signup = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [countdown, setCountdown] = useState(0);
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const digitInputRefs = useRef([]);
+  const [countdown, setCountdown] = useState(0); // Resend timer (e.g. 40s)
+  const [expirySeconds, setExpirySeconds] = useState(300); // Code expiry (e.g. 05:00)
   const [devOtpCode, setDevOtpCode] = useState(null);
 
   // Form State
@@ -67,6 +70,7 @@ export const Signup = () => {
   const { success, error } = useToast();
   const navigate = useNavigate();
 
+  // Resend countdown timer
   useEffect(() => {
     let timer;
     if (countdown > 0) {
@@ -74,6 +78,93 @@ export const Signup = () => {
     }
     return () => clearTimeout(timer);
   }, [countdown]);
+
+  // Expiry countdown timer (MM:SS) for Step 4
+  useEffect(() => {
+    let timer;
+    if (currentStep === 4 && expirySeconds > 0) {
+      timer = setInterval(() => {
+        setExpirySeconds((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [currentStep, expirySeconds]);
+
+  // Mask email as user requested (e.g. we*****@gmail.com)
+  const maskEmail = (emailStr) => {
+    if (!emailStr) return '';
+    const parts = emailStr.split('@');
+    if (parts.length < 2) return emailStr;
+    const namePart = parts[0];
+    const domain = parts[1];
+    if (namePart.length <= 2) {
+      return `${namePart}*****@${domain}`;
+    }
+    return `${namePart.slice(0, 2)}*****@${domain}`;
+  };
+
+  // Format seconds as MM:SS (e.g. 04:55)
+  const formatTimer = (totalSeconds) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  // Handle individual digit input
+  const handleDigitChange = (index, value) => {
+    const clean = value.replace(/\D/g, '');
+    const updated = [...otpDigits];
+
+    if (!clean) {
+      updated[index] = '';
+      setOtpDigits(updated);
+      return;
+    }
+
+    if (clean.length === 1) {
+      updated[index] = clean;
+      setOtpDigits(updated);
+      if (index < 5) {
+        digitInputRefs.current[index + 1]?.focus();
+      }
+    } else {
+      // Pasted or typed multiple digits
+      const chars = clean.slice(0, 6).split('');
+      chars.forEach((c, idx) => {
+        if (index + idx < 6) {
+          updated[index + idx] = c;
+        }
+      });
+      setOtpDigits(updated);
+      const nextIdx = Math.min(5, index + chars.length);
+      digitInputRefs.current[nextIdx]?.focus();
+    }
+  };
+
+  const handleDigitKeyDown = (index, e) => {
+    if (e.key === 'Backspace') {
+      if (!otpDigits[index] && index > 0) {
+        digitInputRefs.current[index - 1]?.focus();
+      }
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      digitInputRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      digitInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleDigitPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const updated = ['', '', '', '', '', ''];
+    pasted.split('').forEach((char, idx) => {
+      if (idx < 6) updated[idx] = char;
+    });
+    setOtpDigits(updated);
+    const targetIdx = Math.min(5, pasted.length);
+    digitInputRefs.current[targetIdx]?.focus();
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -146,11 +237,13 @@ export const Signup = () => {
           password: formData.password,
         });
 
-        success('A 4-digit verification OTP has been sent to your email.');
+        success('A 6-digit verification code has been sent to your email.');
         if (data.data?.devOtp) {
           setDevOtpCode(data.data.devOtp);
         }
-        setCountdown(60);
+        setCountdown(40);
+        setExpirySeconds(300);
+        setOtpDigits(['', '', '', '', '', '']);
         setCurrentStep(4);
       } catch (err) {
         let msg = 'Registration failed. Please try again.';
@@ -176,18 +269,18 @@ export const Signup = () => {
     e.preventDefault();
     setErrorMsg('');
 
-    const trimmedOtp = otp.trim();
-    if (!/^\d{4}$/.test(trimmedOtp)) {
-      return setErrorMsg('Please enter the 4-digit verification OTP.');
+    const fullCode = otpDigits.join('').trim();
+    if (fullCode.length !== 6) {
+      return setErrorMsg('Please enter the full 6-digit verification code.');
     }
 
     setLoading(true);
     try {
-      await authApi.verifySignupOtp(formData.email.trim().toLowerCase(), trimmedOtp);
+      await authApi.verifySignupOtp(formData.email.trim().toLowerCase(), fullCode);
       success('Account created and verified successfully! You can now log in.');
       navigate('/login', { replace: true });
     } catch (err) {
-      let msg = 'Invalid or expired OTP. Please check your email and try again.';
+      let msg = 'Invalid or expired code. Please check your email and try again.';
       if (err.response?.data?.message) {
         msg = err.response.data.message;
       } else if (err.message === 'Network Error' || !err.response) {
@@ -206,13 +299,15 @@ export const Signup = () => {
     setLoading(true);
     try {
       const { data } = await authApi.resendSignupOtp(formData.email.trim().toLowerCase());
-      success('A new verification OTP has been sent to your email.');
-      setCountdown(60);
+      success('A new verification code has been sent to your email.');
+      setCountdown(40);
+      setExpirySeconds(300);
+      setOtpDigits(['', '', '', '', '', '']);
       if (data.data?.devOtp) {
         setDevOtpCode(data.data.devOtp);
       }
     } catch (err) {
-      let msg = 'Failed to resend verification OTP.';
+      let msg = 'Failed to resend verification code.';
       if (err.response?.data?.message) {
         msg = err.response.data.message;
       } else if (err.message === 'Network Error' || !err.response) {
@@ -229,81 +324,86 @@ export const Signup = () => {
     <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-lg">
         {/* Step Navigation Bar: Back Button */}
-        <div className="mb-4">
-          {currentStep === 1 ? (
-            <Link
-              to="/login"
-              className="btn btn-secondary btn-sm inline-flex items-center gap-1.5"
-            >
-              <ArrowLeft size={15} />
-              <span>← Back to Login</span>
-            </Link>
-          ) : (
-            <button
-              onClick={() => {
-                setErrorMsg('');
-                setCurrentStep((prev) => Math.max(1, prev - 1));
-              }}
-              className="btn btn-secondary btn-sm inline-flex items-center gap-1.5"
-            >
-              <ArrowLeft size={15} />
-              <span>← Back to Step {currentStep - 1}</span>
-            </button>
-          )}
-        </div>
+        {currentStep < 4 && (
+          <div className="mb-4">
+            {currentStep === 1 ? (
+              <Link
+                to="/login"
+                className="btn btn-secondary btn-sm inline-flex items-center gap-1.5"
+              >
+                <ArrowLeft size={15} />
+                <span>← Back to Login</span>
+              </Link>
+            ) : (
+              <button
+                onClick={() => {
+                  setErrorMsg('');
+                  setCurrentStep((prev) => Math.max(1, prev - 1));
+                }}
+                className="btn btn-secondary btn-sm inline-flex items-center gap-1.5"
+              >
+                <ArrowLeft size={15} />
+                <span>← Back to Step {currentStep - 1}</span>
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="card p-8 bg-surface-50 dark:bg-surface-800 shadow-md border border-border-color">
-          {/* Header */}
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-              Create your account
-            </h1>
-            <p className="mt-1 text-xs text-text-secondary">
-              Step {currentStep} of 4 — {
-                currentStep === 1 ? 'Personal Details' :
-                currentStep === 2 ? 'Role & Education' :
-                currentStep === 3 ? 'Set Password' :
-                'Verify Email with OTP'
-              }
-            </p>
-          </div>
-
-          {/* Progress Indicator */}
-          <div className="flex items-center justify-between mb-8 max-w-xs mx-auto">
-            {[1, 2, 3, 4].map((stepNumber, index) => (
-              <div key={stepNumber} className="flex items-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (stepNumber < currentStep) {
-                      setErrorMsg('');
-                      setCurrentStep(stepNumber);
-                    }
-                  }}
-                  disabled={stepNumber > currentStep}
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition border ${
-                    currentStep === stepNumber
-                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white shadow-xs'
-                      : currentStep > stepNumber
-                      ? 'bg-neutral-700 text-white dark:bg-neutral-300 dark:text-neutral-900 border-neutral-700 dark:border-neutral-300 cursor-pointer'
-                      : 'bg-surface-200 dark:bg-surface-700 text-text-tertiary border-transparent'
-                  }`}
-                  title={`Go to step ${stepNumber}`}
-                >
-                  {currentStep > stepNumber ? '✓' : stepNumber}
-                </button>
-                {index < 3 && (
-                  <div
-                    className={`h-0.5 w-10 sm:w-14 mx-1 transition ${
-                      currentStep > stepNumber
-                        ? 'bg-neutral-700 dark:bg-neutral-300'
-                        : 'bg-surface-200 dark:bg-surface-700'
-                    }`}
-                  />
-                )}
+          {/* Header for Steps 1-3 */}
+          {currentStep < 4 && (
+            <>
+              <div className="text-center mb-6">
+                <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+                  Create your account
+                </h1>
+                <p className="mt-1 text-xs text-text-secondary">
+                  Step {currentStep} of 4 — {
+                    currentStep === 1 ? 'Personal Details' :
+                    currentStep === 2 ? 'Role & Education' :
+                    'Set Password'
+                  }
+                </p>
               </div>
-            ))}
-          </div>
+
+              {/* Progress Indicator */}
+              <div className="flex items-center justify-between mb-8 max-w-xs mx-auto">
+                {[1, 2, 3, 4].map((stepNumber, index) => (
+                  <div key={stepNumber} className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (stepNumber < currentStep) {
+                          setErrorMsg('');
+                          setCurrentStep(stepNumber);
+                        }
+                      }}
+                      disabled={stepNumber > currentStep}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition border ${
+                        currentStep === stepNumber
+                          ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white shadow-xs'
+                          : currentStep > stepNumber
+                          ? 'bg-neutral-700 text-white dark:bg-neutral-300 dark:text-neutral-900 border-neutral-700 dark:border-neutral-300 cursor-pointer'
+                          : 'bg-surface-200 dark:bg-surface-700 text-text-tertiary border-transparent'
+                      }`}
+                      title={`Go to step ${stepNumber}`}
+                    >
+                      {currentStep > stepNumber ? '✓' : stepNumber}
+                    </button>
+                    {index < 3 && (
+                      <div
+                        className={`h-0.5 w-10 sm:w-14 mx-1 transition ${
+                          currentStep > stepNumber
+                            ? 'bg-neutral-700 dark:bg-neutral-300'
+                            : 'bg-surface-200 dark:bg-surface-700'
+                        }`}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* Error Notice */}
           {errorMsg && (
@@ -602,116 +702,149 @@ export const Signup = () => {
             </form>
           )}
 
-          {/* STEP 4: Email 4-Digit OTP Verification */}
+          {/* STEP 4: Email 6-Digit Code Verification (Matching Screenshot, Neutral Aesthetic) */}
           {currentStep === 4 && (
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div className="p-2.5 rounded-lg border border-border-color bg-surface-100 dark:bg-surface-700/50 flex items-center justify-between text-xs">
-                <span className="text-text-secondary">
-                  OTP sent to: <strong className="text-text-primary">{formData.email}</strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setErrorMsg('');
-                    setCurrentStep(1);
-                  }}
-                  className="font-semibold underline text-text-primary"
-                >
-                  Change Email
-                </button>
+            <div className="pt-2">
+              {/* Floating Top Checkmark Badge */}
+              <div className="w-14 h-14 rounded-full border border-border-color bg-surface-100 dark:bg-surface-800 text-text-primary flex items-center justify-center shadow-xs mx-auto -mt-3 mb-4">
+                <Check size={26} strokeWidth={2.5} className="text-text-primary" />
               </div>
 
+              {/* Title & Subtitle */}
+              <h2 className="text-2xl font-bold tracking-tight text-text-primary text-center">
+                Verify Your Email
+              </h2>
+              <p className="mt-1 text-xs text-text-secondary text-center">
+                Enter the 6-digit verification code sent to
+              </p>
+
+              {/* Email Pill Badge */}
+              <div className="flex items-center justify-center mt-3 mb-4">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-border-color bg-surface-100 dark:bg-surface-800/80 text-text-primary text-xs font-medium shadow-2xs">
+                  <Mail size={13} className="text-text-secondary" />
+                  <span className="font-mono">{maskEmail(formData.email)}</span>
+                </div>
+              </div>
+
+              {/* Expiry Countdown */}
+              <p className="text-xs text-text-secondary text-center mb-6 font-medium">
+                Code expires in:{' '}
+                <span className="font-mono font-bold text-text-primary">
+                  {formatTimer(expirySeconds)}
+                </span>
+              </p>
+
+              {/* Dev Mode OTP auto-fill bar if present */}
               {devOtpCode && (
-                <div className="p-2.5 rounded-lg border border-neutral-400 dark:border-neutral-600 bg-surface-200 dark:bg-surface-700 text-text-primary text-xs flex items-center justify-between">
-                  <span>Dev Mode OTP: <strong>{devOtpCode}</strong></span>
+                <div className="mb-5 p-2 rounded-lg border border-border-color bg-surface-100 dark:bg-surface-800 text-text-primary text-xs flex items-center justify-between">
+                  <span>Dev Mode Code: <strong className="font-mono">{devOtpCode}</strong></span>
                   <button
                     type="button"
-                    onClick={() => setOtp(devOtpCode)}
-                    className="font-bold underline"
+                    onClick={() => {
+                      const chars = devOtpCode.split('').slice(0, 6);
+                      setOtpDigits(chars);
+                    }}
+                    className="font-bold underline hover:opacity-80"
                   >
                     Auto-Fill
                   </button>
                 </div>
               )}
 
-              <div>
-                <label className="label" htmlFor="otp">
-                  Enter 4-Digit Email OTP
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-tertiary">
-                    <KeyRound size={16} />
-                  </div>
-                  <input
-                    id="otp"
-                    name="otp"
-                    type="text"
-                    maxLength={4}
-                    placeholder="••••"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                    className="input-field pl-10 text-center tracking-widest font-mono text-lg font-bold"
-                    required
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs">
-                {countdown > 0 ? (
-                  <span className="text-text-secondary">
-                    Resend OTP in <strong>{countdown}s</strong>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    disabled={loading}
-                    className="font-medium hover:underline flex items-center gap-1 text-text-primary"
-                  >
-                    <RotateCw size={12} />
-                    Resend OTP
-                  </button>
-                )}
-              </div>
-
-              <div className="pt-2 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setErrorMsg('');
-                    setCurrentStep(3);
-                  }}
-                  className="btn btn-secondary w-1/3 py-2.5 text-sm flex items-center justify-center gap-1.5"
+              {/* Form with 6 Individual Digit Inputs */}
+              <form onSubmit={handleVerifyOtp} className="space-y-6">
+                <div
+                  className="flex justify-center items-center gap-2 sm:gap-3"
+                  onPaste={handleDigitPaste}
                 >
-                  <ArrowLeft size={16} />
-                  <span>← Back</span>
-                </button>
+                  {otpDigits.map((digit, idx) => (
+                    <input
+                      key={idx}
+                      ref={(el) => (digitInputRefs.current[idx] = el)}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleDigitChange(idx, e.target.value)}
+                      onKeyDown={(e) => handleDigitKeyDown(idx, e)}
+                      className="w-11 h-14 sm:w-12 sm:h-14 text-center font-mono text-2xl font-bold rounded-2xl border border-border-color bg-surface-100 dark:bg-surface-900 text-text-primary focus:border-text-primary focus:ring-1 focus:ring-text-primary focus:outline-none transition-all shadow-xs"
+                      autoFocus={idx === 0}
+                    />
+                  ))}
+                </div>
+
+                {/* Verify Email Button */}
                 <button
                   type="submit"
-                  disabled={loading || otp.trim().length !== 4}
-                  className="btn btn-primary w-2/3 py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
+                  disabled={loading || otpDigits.join('').length !== 6}
+                  className="btn btn-primary w-full py-3.5 text-sm font-semibold flex items-center justify-center gap-2 rounded-xl transition-all shadow-xs"
                 >
                   {loading ? (
                     <ButtonLoader />
                   ) : (
                     <>
-                      <CheckCircle2 size={16} />
-                      <span>Verify & Create Account</span>
+                      <span>Verify Email</span>
+                      <ArrowRight size={16} />
                     </>
                   )}
                 </button>
+              </form>
+
+              {/* Resend Section */}
+              <div className="text-center mt-6 space-y-1">
+                <p className="text-xs text-text-secondary">
+                  Didn't receive the verification code?
+                </p>
+                {countdown > 0 ? (
+                  <p className="text-xs text-text-tertiary flex items-center justify-center gap-1.5 font-medium pt-1">
+                    <RotateCw size={13} className="text-text-tertiary" />
+                    <span>
+                      Resend code in <strong className="text-text-primary font-mono">{countdown}s</strong>
+                    </span>
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={loading}
+                    className="text-xs font-semibold text-text-primary hover:underline inline-flex items-center gap-1.5 pt-1"
+                  >
+                    <RotateCw size={13} />
+                    <span>Resend code</span>
+                  </button>
+                )}
               </div>
-            </form>
+
+              {/* Subtle Divider */}
+              <hr className="border-border-color my-6" />
+
+              {/* Want to use a different email */}
+              <p className="text-xs text-text-secondary text-center">
+                Want to use a different email?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMsg('');
+                    setCurrentStep(1);
+                  }}
+                  className="font-semibold text-text-primary underline hover:opacity-80"
+                >
+                  Sign up again
+                </button>
+              </p>
+            </div>
           )}
 
-          {/* Footer Navigation */}
-          <div className="mt-6 pt-5 border-t border-border-color text-center text-xs text-text-secondary">
-            Already have an account?{' '}
-            <Link to="/login" className="font-semibold underline text-text-primary">
-              Log in here
-            </Link>
-          </div>
+          {/* Footer Navigation for Steps 1-3 */}
+          {currentStep < 4 && (
+            <div className="mt-6 pt-5 border-t border-border-color text-center text-xs text-text-secondary">
+              Already have an account?{' '}
+              <Link to="/login" className="font-semibold underline text-text-primary">
+                Log in here
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </div>

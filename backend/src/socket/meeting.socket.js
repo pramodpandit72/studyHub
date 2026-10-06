@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import attendanceService from '../services/attendance.service.js';
 
 const activeRooms = new Map();
+const activePolls = new Map();
 
 export const setupMeetingSocket = (io) => {
   io.use(async (socket, next) => {
@@ -56,6 +57,10 @@ export const setupMeetingSocket = (io) => {
 
       const participants = Array.from(room.values());
       socket.emit('room-participants', participants);
+
+      if (activePolls.has(roomId)) {
+        socket.emit('active-poll', activePolls.get(roomId));
+      }
     });
 
     socket.on('offer', ({ to, offer }) => {
@@ -121,12 +126,66 @@ export const setupMeetingSocket = (io) => {
       }
     });
 
+    // Polling Socket Events
+    socket.on('create-poll', ({ roomId, question, options }) => {
+      if (!roomId || !question?.trim() || !Array.isArray(options)) return;
+      const validOptions = options
+        .map((opt) => (typeof opt === 'string' ? opt.trim() : ''))
+        .filter(Boolean);
+
+      if (validOptions.length < 2) return;
+
+      const poll = {
+        id: Date.now().toString(),
+        roomId,
+        question: question.trim(),
+        options: validOptions.map((text, idx) => ({ id: idx, text, votes: 0 })),
+        createdBy: {
+          id: socket.user._id.toString(),
+          name: socket.user.name,
+        },
+        voters: {}, // userId -> optionId
+        totalVotes: 0,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+
+      activePolls.set(roomId, poll);
+      io.to(roomId).emit('poll-published', poll);
+    });
+
+    socket.on('vote-poll', ({ roomId, pollId, optionId }) => {
+      const poll = activePolls.get(roomId);
+      if (!poll || poll.id !== pollId || !poll.isActive) return;
+
+      const userId = socket.user._id.toString();
+      if (poll.voters[userId] !== undefined) return;
+
+      const optionIndex = poll.options.findIndex((opt) => opt.id === optionId);
+      if (optionIndex === -1) return;
+
+      poll.options[optionIndex].votes += 1;
+      poll.totalVotes += 1;
+      poll.voters[userId] = optionId;
+
+      io.to(roomId).emit('poll-updated', poll);
+    });
+
+    socket.on('end-poll', ({ roomId, pollId }) => {
+      const poll = activePolls.get(roomId);
+      if (!poll || poll.id !== pollId) return;
+
+      poll.isActive = false;
+      io.to(roomId).emit('poll-closed', poll);
+    });
+
     socket.on('end-meeting', async ({ roomId, meetingId }) => {
       io.to(roomId).emit('meeting-ended');
       const room = activeRooms.get(roomId);
       if (room) {
         activeRooms.delete(roomId);
       }
+      activePolls.delete(roomId);
       const mId = meetingId || socket.currentMeetingId;
       if (mId) {
         await attendanceService.finalizeMeetingAttendance(mId);
@@ -141,6 +200,7 @@ export const setupMeetingSocket = (io) => {
         socket.to(roomId).emit('participant-left', { socketId: socket.id });
         if (room.size === 0) {
           activeRooms.delete(roomId);
+          activePolls.delete(roomId);
         }
       }
       const mId = meetingId || socket.currentMeetingId;
@@ -162,6 +222,7 @@ export const setupMeetingSocket = (io) => {
           socket.to(roomId).emit('participant-left', { socketId: socket.id });
           if (room.size === 0) {
             activeRooms.delete(roomId);
+            activePolls.delete(roomId);
           }
         }
       }

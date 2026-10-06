@@ -11,7 +11,7 @@ export const getProfile = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const allowedFields = ['name', 'age', 'role', 'studyOrPreparation', 'institution', 'experienceLevel', 'themePreference'];
+    const allowedFields = ['name', 'age', 'role', 'mobile', 'studyOrPreparation', 'institution', 'experienceLevel', 'themePreference'];
     const updates = {};
 
     for (const field of allowedFields) {

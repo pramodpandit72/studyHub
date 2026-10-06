@@ -113,7 +113,11 @@ export const Navbar = () => {
 
                 <div className="h-5 w-px bg-border-color mx-1" />
 
-                <div className="flex items-center gap-2">
+                <Link
+                  to="/profile"
+                  className="flex items-center gap-2 hover:opacity-80 transition cursor-pointer"
+                  title="View Profile"
+                >
                   <div className="w-8 h-8 rounded-full bg-surface-200 dark:bg-surface-700 flex items-center justify-center text-xs font-semibold text-text-primary border border-border-color">
                     {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
                   </div>
@@ -125,7 +129,7 @@ export const Navbar = () => {
                       {user?.role}
                     </p>
                   </div>
-                </div>
+                </Link>
 
                 <button
                   onClick={handleLogout}
@@ -165,7 +169,12 @@ export const Navbar = () => {
         <div className="lg:hidden border-t border-border-color bg-surface-50 dark:bg-surface-900 px-4 pt-3 pb-5 space-y-2">
           {isAuthenticated ? (
             <>
-              <div className="flex items-center gap-3 pb-3 border-b border-border-color mb-3">
+              <Link
+                to="/profile"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 pb-3 border-b border-border-color mb-3 hover:opacity-80 transition cursor-pointer"
+                title="View Profile"
+              >
                 <div className="w-9 h-9 rounded-full bg-surface-200 dark:bg-surface-700 flex items-center justify-center font-bold text-sm text-text-primary border border-border-color">
                   {user?.name?.charAt(0).toUpperCase() || 'U'}
                 </div>
@@ -173,7 +182,7 @@ export const Navbar = () => {
                   <p className="text-sm font-semibold text-text-primary">{user?.name}</p>
                   <p className="text-xs text-text-secondary">{user?.role} • {user?.email}</p>
                 </div>
-              </div>
+              </Link>
 
               {navLinks.map((link) => {
                 const Icon = link.icon;

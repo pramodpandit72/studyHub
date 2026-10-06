@@ -9,6 +9,7 @@ import { VideoTile } from '../components/meeting/VideoTile';
 import { MeetingControls } from '../components/meeting/MeetingControls';
 import { ChatPanel } from '../components/meeting/ChatPanel';
 import { ParticipantsPanel } from '../components/meeting/ParticipantsPanel';
+import { PollPanel } from '../components/meeting/PollPanel';
 import { PageLoader } from '../components/common/Loader';
 import { Copy, Check, Users, Shield, ArrowLeft, Sun, Moon } from 'lucide-react';
 
@@ -24,6 +25,7 @@ export const MeetingRoom = () => {
   const [loading, setLoading] = useState(!meeting);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
+  const [isPollOpen, setIsPollOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Initial media preference passed from preview screen
@@ -57,6 +59,7 @@ export const MeetingRoom = () => {
     remoteStreams,
     participants,
     messages,
+    activePoll,
     isAudioEnabled,
     isVideoEnabled,
     isScreenSharing,
@@ -69,6 +72,9 @@ export const MeetingRoom = () => {
     muteParticipant,
     removeParticipant,
     endMeetingForAll,
+    createPoll,
+    votePoll,
+    endPoll,
   } = useWebRTC(meetingCode, id, user, {
     onMeetingEnded: () => {
       error('The host has ended this meeting.');
@@ -143,14 +149,16 @@ export const MeetingRoom = () => {
       {/* Top Header */}
       <header className="h-14 px-4 bg-surface-50/95 dark:bg-surface-900/95 border-b border-border-color flex items-center justify-between shrink-0 z-10 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleLeaveMeeting}
-            className="btn btn-secondary btn-sm text-xs flex items-center gap-1.5"
-            title="Leave room and return to meetings"
-          >
-            <ArrowLeft size={14} />
-            <span>← Back</span>
-          </button>
+          {!isHost && (
+            <button
+              onClick={handleLeaveMeeting}
+              className="btn btn-secondary btn-sm text-xs flex items-center gap-1.5"
+              title="Leave room and return to meetings"
+            >
+              <ArrowLeft size={14} />
+              <span>← Leave</span>
+            </button>
+          )}
           <div>
             <h2 className="text-sm font-semibold truncate max-w-xs sm:max-w-md text-text-primary">
               {meeting.title}
@@ -250,6 +258,17 @@ export const MeetingRoom = () => {
           onMuteParticipant={muteParticipant}
           onRemoveParticipant={removeParticipant}
         />
+
+        <PollPanel
+          isOpen={isPollOpen}
+          onClose={() => setIsPollOpen(false)}
+          isHost={isHost}
+          activePoll={activePoll}
+          onCreatePoll={createPoll}
+          onVotePoll={votePoll}
+          onEndPoll={endPoll}
+          currentUserId={user?._id}
+        />
       </div>
 
       {/* Bottom Meeting Controls */}
@@ -259,6 +278,8 @@ export const MeetingRoom = () => {
         isScreenSharing={isScreenSharing}
         isChatOpen={isChatOpen}
         isParticipantsOpen={isParticipantsOpen}
+        isPollOpen={isPollOpen}
+        hasActivePoll={Boolean(activePoll?.isActive)}
         participantCount={participants.length + 1}
         isHost={isHost}
         onToggleAudio={toggleAudio}
@@ -267,10 +288,17 @@ export const MeetingRoom = () => {
         onToggleChat={() => {
           setIsChatOpen(!isChatOpen);
           if (isParticipantsOpen) setIsParticipantsOpen(false);
+          if (isPollOpen) setIsPollOpen(false);
         }}
         onToggleParticipants={() => {
           setIsParticipantsOpen(!isParticipantsOpen);
           if (isChatOpen) setIsChatOpen(false);
+          if (isPollOpen) setIsPollOpen(false);
+        }}
+        onTogglePoll={() => {
+          setIsPollOpen(!isPollOpen);
+          if (isChatOpen) setIsChatOpen(false);
+          if (isParticipantsOpen) setIsParticipantsOpen(false);
         }}
         onLeaveMeeting={handleLeaveMeeting}
         onEndMeeting={handleEndMeeting}

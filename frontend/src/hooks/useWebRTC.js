@@ -18,6 +18,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [activePoll, setActivePoll] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // connecting, connected, disconnected
   const [mediaError, setMediaError] = useState(null);
 
@@ -231,6 +232,23 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       setMessages((prev) => [...prev, message]);
     });
 
+    // Poll events
+    socket.on('active-poll', (poll) => {
+      setActivePoll(poll);
+    });
+
+    socket.on('poll-published', (poll) => {
+      setActivePoll(poll);
+    });
+
+    socket.on('poll-updated', (poll) => {
+      setActivePoll(poll);
+    });
+
+    socket.on('poll-closed', (poll) => {
+      setActivePoll(poll);
+    });
+
     // Force Mute
     socket.on('force-mute', () => {
       if (localStreamRef.current) {
@@ -274,6 +292,10 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         socketRef.current.off('participant-video-toggle');
         socketRef.current.off('participant-left');
         socketRef.current.off('new-message');
+        socketRef.current.off('active-poll');
+        socketRef.current.off('poll-published');
+        socketRef.current.off('poll-updated');
+        socketRef.current.off('poll-closed');
         socketRef.current.off('force-mute');
         socketRef.current.off('meeting-ended');
         socketRef.current.off('removed-from-meeting');
@@ -431,11 +453,25 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     socketRef.current?.emit('end-meeting', { roomId });
   }, [roomId]);
 
+  // Polling actions
+  const createPoll = useCallback(({ question, options }) => {
+    socketRef.current?.emit('create-poll', { roomId, question, options });
+  }, [roomId]);
+
+  const votePoll = useCallback(({ pollId, optionId }) => {
+    socketRef.current?.emit('vote-poll', { roomId, pollId, optionId });
+  }, [roomId]);
+
+  const endPoll = useCallback((pollId) => {
+    socketRef.current?.emit('end-poll', { roomId, pollId });
+  }, [roomId]);
+
   return {
     localStream,
     remoteStreams,
     participants,
     messages,
+    activePoll,
     isAudioEnabled,
     isVideoEnabled,
     isScreenSharing,
@@ -449,5 +485,8 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     muteParticipant,
     removeParticipant,
     endMeetingForAll,
+    createPoll,
+    votePoll,
+    endPoll,
   };
 };

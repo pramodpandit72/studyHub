@@ -6,8 +6,8 @@ import {
   MonitorUp,
   MessageSquare,
   Users,
+  BarChart2,
   PhoneOff,
-  ShieldAlert
 } from 'lucide-react';
 
 export const MeetingControls = ({
@@ -16,6 +16,8 @@ export const MeetingControls = ({
   isScreenSharing,
   isChatOpen,
   isParticipantsOpen,
+  isPollOpen,
+  hasActivePoll = false,
   unreadCount = 0,
   participantCount = 1,
   isHost = false,
@@ -24,6 +26,7 @@ export const MeetingControls = ({
   onToggleScreenShare,
   onToggleChat,
   onToggleParticipants,
+  onTogglePoll,
   onLeaveMeeting,
   onEndMeeting,
 }) => {
@@ -117,29 +120,45 @@ export const MeetingControls = ({
           )}
         </button>
 
-        {/* Host: End Meeting (For All) Button */}
-        {isHost && (
+        {/* Polls toggle */}
+        <button
+          onClick={onTogglePoll}
+          className={`relative p-3 rounded-full transition border ${
+            isPollOpen
+              ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-black dark:border-white'
+              : 'bg-surface-200 hover:bg-surface-300 text-text-primary border-border-color dark:bg-neutral-800 dark:hover:bg-neutral-700 dark:text-neutral-200 dark:border-neutral-700'
+          }`}
+          title="Meeting Polls"
+          aria-label="Meeting Polls"
+        >
+          <BarChart2 size={20} />
+          {hasActivePoll && !isPollOpen && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-neutral-900 dark:bg-white rounded-full ring-2 ring-surface-50 dark:ring-neutral-900" />
+          )}
+        </button>
+
+        {/* Exclusive: Host sees ONLY "End Meeting", Participants see "Leave Meeting" */}
+        {isHost ? (
           <button
             onClick={onEndMeeting}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-surface-200 hover:bg-surface-300 text-text-primary border border-border-color dark:bg-neutral-800 dark:hover:bg-neutral-700 dark:text-white dark:border-neutral-600 rounded-lg transition ml-2"
-            title="End Meeting for All Participants"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 dark:bg-neutral-950 dark:hover:bg-neutral-800 dark:text-white dark:border-neutral-500 transition text-xs font-semibold shadow-xs ml-1"
+            title="End Meeting for all participants"
+            aria-label="End Meeting"
           >
-            <ShieldAlert size={15} />
-            <span className="hidden sm:inline">End Meeting (For All)</span>
-            <span className="sm:hidden">End All</span>
+            <PhoneOff size={16} />
+            <span>End Meeting</span>
+          </button>
+        ) : (
+          <button
+            onClick={onLeaveMeeting}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 dark:bg-neutral-950 dark:hover:bg-neutral-800 dark:text-white dark:border-neutral-500 transition text-xs font-semibold shadow-xs ml-1"
+            title="Leave Meeting"
+            aria-label="Leave Meeting"
+          >
+            <PhoneOff size={16} />
+            <span>Leave Meeting</span>
           </button>
         )}
-
-        {/* Clear Leave Meeting Button (Icon + Text) */}
-        <button
-          onClick={onLeaveMeeting}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 dark:bg-neutral-950 dark:hover:bg-neutral-800 dark:text-white dark:border-neutral-500 transition text-xs font-semibold shadow-xs ml-1"
-          title="Leave Meeting"
-          aria-label="Leave Meeting"
-        >
-          <PhoneOff size={16} />
-          <span>Leave Meeting</span>
-        </button>
       </div>
 
       {/* Right spacer */}

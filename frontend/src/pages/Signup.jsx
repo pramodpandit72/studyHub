@@ -330,7 +330,7 @@ export const Signup = () => {
                     name="name"
                     type="text"
                     required
-                    placeholder="e.g. Rahul Sharma"
+                    placeholder="Enter Full Name"
                     value={formData.name}
                     onChange={handleChange}
                     className="input-field pl-10 text-sm"
@@ -352,7 +352,7 @@ export const Signup = () => {
                     name="email"
                     type="email"
                     required
-                    placeholder="name@example.com"
+                    placeholder="Enter email"
                     value={formData.email}
                     onChange={handleChange}
                     className="input-field pl-10 text-sm"
@@ -378,7 +378,7 @@ export const Signup = () => {
                     type="tel"
                     required
                     maxLength={10}
-                    placeholder="9876543210"
+                    placeholder="Enter mobile no."
                     value={formData.mobile}
                     onChange={handleChange}
                     className="input-field pl-16 font-mono text-sm"
@@ -401,7 +401,7 @@ export const Signup = () => {
                     required
                     min={10}
                     max={120}
-                    placeholder="e.g. 21"
+                    placeholder="Enter Age"
                     value={formData.age}
                     onChange={handleChange}
                     className="input-field pl-10 text-sm"

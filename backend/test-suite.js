@@ -19,8 +19,8 @@ const runTests = async () => {
   console.log('    viMeet AUTH (EMAIL OTP SIGNUP) & TEST SUITE     ');
   console.log('====================================================');
 
-  await mongoose.connect(env.MONGO_URI);
-  console.log('[DB] Connected to MongoDB');
+  await mongoose.connect(env.MONGO_URI, { dbName: 'vimeet' });
+  console.log(`[DB] Connected to MongoDB database: ${mongoose.connection.name}`);
 
   // Start server on an ephemeral port
   server = http.createServer(app);

@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { authApi } from '../services/auth.api';
 import { ButtonLoader } from '../components/common/Loader';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
+import { SEO } from '../components/common/SEO';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
@@ -57,6 +58,11 @@ export const Login = () => {
 
   return (
     <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <SEO
+        title="Log In — StudyHub"
+        description="Log in to StudyHub to access live video meetings, virtual study rooms, scheduled classes, and automated attendance records."
+        canonical="https://studyhub.online/login"
+      />
       <div className="w-full max-w-md">
         {/* Navigation Bar: Back Button */}
         <div className="mb-4">

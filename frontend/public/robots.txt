@@ -1,0 +1,30 @@
+# robots.txt for StudyHub (https://studyhub.online)
+# Controls search engine indexing and crawling behavior
+
+User-agent: *
+
+# Public indexable pages
+Allow: /
+Allow: /login
+Allow: /signup
+Allow: /forgot-password
+Allow: /feedback
+Allow: /favicon.svg
+Allow: /site.webmanifest
+Allow: /studyhub-og.png
+
+# Disallow private, authenticated, or temporary application routes
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /meetings
+Disallow: /meetings/
+Disallow: /meeting/
+Disallow: /attendance
+Disallow: /attendance/
+Disallow: /profile
+Disallow: /profile/
+Disallow: /join/
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://studyhub.online/sitemap.xml

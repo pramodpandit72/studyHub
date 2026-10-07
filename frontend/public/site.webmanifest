@@ -1,0 +1,17 @@
+{
+  "name": "StudyHub — Modern Meeting & Learning Platform",
+  "short_name": "StudyHub",
+  "description": "Lightweight virtual meetings, online classes, and automated attendance tracking.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#18181b",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "48x48 72x72 96x96 144x144 192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -3,11 +3,90 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StudyHub — Modern Meeting & Learning Platform</title>
-    <meta name="description" content="A lightweight, fast virtual meeting, classroom, and attendance management platform for teachers, students, and organizations." />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>StudyHub — Online Meetings, Classes &amp; Study Sessions</title>
+    <meta name="description" content="StudyHub delivers clear video meetings, interactive virtual classes, automated attendance tracking, real-time chat, and live host polls for students and educators." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://studyhub.online" />
+
+    <!-- Branding & PWA -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="application-name" content="StudyHub" />
+    <meta name="apple-mobile-web-app-title" content="StudyHub" />
+    <meta name="theme-color" content="#18181b" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:site_name" content="StudyHub" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="StudyHub — Online Meetings, Classes &amp; Study Sessions" />
+    <meta property="og:description" content="StudyHub delivers clear video meetings, interactive virtual classes, automated attendance tracking, real-time chat, and live host polls for students and educators." />
+    <meta property="og:url" content="https://studyhub.online" />
+    <meta property="og:image" content="https://studyhub.online/studyhub-og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="StudyHub - Online Meetings, Classes &amp; Study Sessions" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="StudyHub — Online Meetings, Classes &amp; Study Sessions" />
+    <meta name="twitter:description" content="StudyHub delivers clear video meetings, interactive virtual classes, automated attendance tracking, real-time chat, and live host polls for students and educators." />
+    <meta name="twitter:image" content="https://studyhub.online/studyhub-og.png" />
+
+    <!-- Google Fonts Preconnect & Display Swap -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Structured Data (JSON-LD) for Search Engines -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://studyhub.online/#website",
+          "url": "https://studyhub.online",
+          "name": "StudyHub",
+          "description": "Online meeting, virtual classroom, and automated attendance management platform.",
+          "inLanguage": "en-US"
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://studyhub.online/#organization",
+          "name": "StudyHub",
+          "url": "https://studyhub.online",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://studyhub.online/favicon.svg"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://studyhub.online/#application",
+          "name": "StudyHub",
+          "url": "https://studyhub.online",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "Web Browser",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "featureList": [
+            "Online Video Meetings",
+            "Virtual Classrooms",
+            "Automated Attendance Tracking",
+            "In-Meeting Real-time Chat",
+            "Live Host Polling",
+            "Participant Management"
+          ]
+        }
+      ]
+    }
+    </script>
+
+    <!-- Theme State Initializer -->
     <script>
       (function() {
         try {

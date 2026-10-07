@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   Check,
 } from 'lucide-react';
+import { SEO } from '../components/common/SEO';
 
 const ROLES = [
   'Student',
@@ -322,6 +323,11 @@ export const Signup = () => {
 
   return (
     <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <SEO
+        title="Create Your Account — StudyHub"
+        description="Join StudyHub for free. Create your account with secure email verification to schedule classes, attend live study sessions, and access automated attendance."
+        canonical="https://studyhub.online/signup"
+      />
       <div className="w-full max-w-lg">
         {/* Step Navigation Bar: Back Button */}
         {currentStep < 4 && (
@@ -355,7 +361,7 @@ export const Signup = () => {
             <>
               <div className="text-center mb-6">
                 <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-                  Create your account
+                  Create Your StudyHub Account
                 </h1>
                 <p className="mt-1 text-xs text-text-secondary">
                   Step {currentStep} of 4 — {

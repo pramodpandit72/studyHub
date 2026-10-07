@@ -14,6 +14,7 @@ import {
   RotateCw,
   CheckCircle2,
 } from 'lucide-react';
+import { SEO } from '../components/common/SEO';
 
 export const ForgotPassword = () => {
   const [step, setStep] = useState(1); // 1 = Enter Email, 2 = Enter Code, 3 = New Password, 4 = Success
@@ -129,6 +130,11 @@ export const ForgotPassword = () => {
 
   return (
     <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <SEO
+        title="Reset Password — StudyHub"
+        description="Recover your StudyHub account password with secure verification."
+        canonical="https://studyhub.online/forgot-password"
+      />
       <div className="w-full max-w-md">
         {/* Navigation Bar: Back Button */}
         <div className="mb-4">
@@ -164,7 +170,7 @@ export const ForgotPassword = () => {
                 {step === 3 && 'Create new password'}
               </h1>
               <p className="mt-1 text-xs text-text-secondary">
-                {step === 1 && 'Enter your registered email and we will send you a reset code via EmailJS.'}
+                {step === 1 && 'Enter your registered email and we will send you a verification code.'}
                 {step === 2 && 'Enter the 6-digit code sent to your email address.'}
                 {step === 3 && 'Choose a secure new password for your account.'}
               </p>

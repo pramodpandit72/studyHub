@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0c"/>
+      <stop offset="50%" stop-color="#121218"/>
+      <stop offset="100%" stop-color="#181824"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="cardBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.02"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle glow circles -->
+  <circle cx="200" cy="150" r="280" fill="#6366f1" fill-opacity="0.12" filter="blur(80px)"/>
+  <circle cx="1000" cy="450" r="300" fill="#a855f7" fill-opacity="0.10" filter="blur(90px)"/>
+
+  <!-- Outer frame border -->
+  <rect x="30" y="30" width="1140" height="570" rx="24" stroke="#ffffff" stroke-opacity="0.1" stroke-width="2" fill="none"/>
+
+  <!-- Logo and Badge -->
+  <g transform="translate(100, 110)">
+    <!-- Logo Icon -->
+    <rect width="56" height="56" rx="14" fill="url(#brand)"/>
+    <path d="M22 18L38 28L22 38V18Z" fill="#ffffff"/>
+    <!-- Brand Name -->
+    <text x="74" y="38" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="34" font-weight="800" fill="#ffffff" letter-spacing="-0.5">StudyHub</text>
+    
+    <rect x="236" y="16" width="150" height="28" rx="14" fill="#ffffff" fill-opacity="0.1"/>
+    <text x="311" y="34" font-family="Inter, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#c4b5fd" text-anchor="middle" letter-spacing="1">LIVE &amp; VIRTUAL</text>
+  </g>
+
+  <!-- Main Headline -->
+  <text x="100" y="260" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="52" font-weight="800" fill="#ffffff" letter-spacing="-1">
+    Meet, Teach and Learn —
+  </text>
+  <text x="100" y="325" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="52" font-weight="800" fill="#a78bfa" letter-spacing="-1">
+    Without Confusion.
+  </text>
+
+  <!-- Subtitle -->
+  <text x="100" y="385" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="400" fill="#94a3b8">
+    Clear video meetings, virtual classrooms, automated attendance tracking,
+  </text>
+  <text x="100" y="415" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="400" fill="#94a3b8">
+    real-time chat, and interactive host polls.
+  </text>
+
+  <!-- Feature Tags -->
+  <g transform="translate(100, 480)">
+    <!-- Tag 1 -->
+    <rect x="0" y="0" width="170" height="42" rx="10" fill="url(#cardBg)" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="85" y="26" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#e2e8f0" text-anchor="middle">⚡ Video Meetings</text>
+
+    <!-- Tag 2 -->
+    <rect x="185" y="0" width="180" height="42" rx="10" fill="url(#cardBg)" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="275" y="26" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#e2e8f0" text-anchor="middle">📋 Auto Attendance</text>
+
+    <!-- Tag 3 -->
+    <rect x="380" y="0" width="180" height="42" rx="10" fill="url(#cardBg)" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="470" y="26" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#e2e8f0" text-anchor="middle">🎓 Virtual Classes</text>
+
+    <!-- Tag 4 -->
+    <rect x="575" y="0" width="180" height="42" rx="10" fill="url(#cardBg)" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="665" y="26" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#e2e8f0" text-anchor="middle">📊 Live Host Polling</text>
+  </g>
+
+  <!-- Domain Branding -->
+  <g transform="translate(860, 500)">
+    <text x="210" y="0" font-family="Inter, -apple-system, sans-serif" font-size="18" font-weight="600" fill="#cbd5e1" text-anchor="end">studyhub.online</text>
+  </g>
+</svg>

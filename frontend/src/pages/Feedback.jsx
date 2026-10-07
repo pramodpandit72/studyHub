@@ -4,6 +4,7 @@ import { ArrowLeft, MessageSquare, CheckCircle, Clock } from 'lucide-react';
 import { submitFeedback, getMyFeedback } from '../services/feedback.api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { SEO } from '../components/common/SEO';
 
 const RATINGS = ['Very Good', 'Good', 'Okay', 'Poor', 'Very Poor'];
 const CATEGORIES = ['Website', 'Meeting', 'Login/Signup', 'Video/Audio', 'Other'];
@@ -80,6 +81,11 @@ export const Feedback = () => {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
+      <SEO
+        title="Feedback & Support — StudyHub"
+        description="Share your feedback, report an issue, or suggest enhancements for the StudyHub meeting and learning platform."
+        canonical="https://studyhub.online/feedback"
+      />
       {/* Top Bar: Back Button */}
       <div className="mb-6 flex items-center justify-between">
         <button

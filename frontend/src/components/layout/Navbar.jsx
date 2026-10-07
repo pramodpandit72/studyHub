@@ -43,7 +43,7 @@ export const Navbar = () => {
         <div className="flex items-center justify-between h-16">
           {/* Brand */}
           <div className="flex items-center gap-6">
-            <Link to={isAuthenticated ? '/dashboard' : '/'} className="flex items-center gap-2.5">
+            <Link to={isAuthenticated ? '/dashboard' : '/'} className="flex items-center gap-2.5" aria-label="StudyHub Homepage">
               <div className="w-8 h-8 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 flex items-center justify-center font-bold shadow-xs">
                 <Video size={18} />
               </div>
@@ -53,7 +53,7 @@ export const Navbar = () => {
             </Link>
 
             {/* Desktop Navigation */}
-            {isAuthenticated && (
+            {isAuthenticated ? (
               <div className="hidden lg:flex items-center gap-1">
                 {navLinks.map((link) => {
                   const Icon = link.icon;
@@ -74,6 +74,18 @@ export const Navbar = () => {
                     </NavLink>
                   );
                 })}
+              </div>
+            ) : (
+              <div className="hidden md:flex items-center gap-5 text-xs font-semibold text-text-secondary">
+                <a href="/#features" className="hover:text-text-primary transition-colors">
+                  Features
+                </a>
+                <a href="/#how-it-works" className="hover:text-text-primary transition-colors">
+                  How It Works
+                </a>
+                <Link to="/feedback" className="hover:text-text-primary transition-colors">
+                  Feedback
+                </Link>
               </div>
             )}
           </div>

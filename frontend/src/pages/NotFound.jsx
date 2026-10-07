@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
 import { Video, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { SEO } from '../components/common/SEO';
 
 export const NotFound = () => {
   const { isAuthenticated } = useAuth();
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center py-20 px-4 text-center">
+      <SEO title="Page Not Found" noindex={true} />
       <div className="w-14 h-14 rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 flex items-center justify-center mb-6">
         <Video size={28} />
       </div>

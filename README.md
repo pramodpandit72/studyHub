@@ -199,3 +199,42 @@ The frontend dev server runs on `http://localhost:5173`.
    - `EMAILJS_TEMPLATE_ID`: `template_xxxxxxx`
    - `EMAILJS_PUBLIC_KEY`: `your_public_key`
    - `EMAILJS_PRIVATE_KEY`: `your_private_access_token`
+
+---
+
+## Technical SEO & Google Search Console Guide
+
+StudyHub comes pre-configured with production-ready, white-hat Technical SEO:
+
+- **Robots Configuration**: `robots.txt` allowing public indexable pages (`/`, `/login`, `/signup`, `/forgot-password`, `/feedback`) and disallowing private app dashboards and meeting rooms.
+- **Sitemap**: Canonical `sitemap.xml` at `https://studyhub.online/sitemap.xml`.
+- **Structured Data**: Semantic JSON-LD schema (`WebSite`, `Organization`, and `SoftwareApplication`) embedded directly in HTML.
+- **Open Graph & Twitter**: Complete metadata with high-resolution 1200x630 social share card (`studyhub-og.png`).
+- **Noindex Protection**: Protected app routes (`/dashboard`, `/profile`, `/attendance`, `/meetings/*`, `/join/*`) automatically emit `<meta name="robots" content="noindex, nofollow" />`.
+
+### How to Connect StudyHub to Google Search Console (GSC)
+
+1. **Add Property**:
+   - Open [Google Search Console](https://search.google.com/search-console).
+   - Click **Add property**.
+   - Choose **Domain** property and enter `studyhub.online` (covers both `studyhub.online` and `www.studyhub.online`), OR choose **URL prefix** and enter `https://studyhub.online`.
+
+2. **Verify Ownership**:
+   - **DNS TXT Record (Recommended for Domain Property)**: Copy the `google-site-verification=...` string from Google Search Console, go to your domain registrar DNS settings (Hostinger, GoDaddy, Cloudflare, Namecheap, etc.), and add a `TXT` record for `@` with that verification token.
+   - **HTML Tag (Alternative for URL Prefix)**: Add the verification meta tag `<meta name="google-site-verification" content="YOUR_TOKEN" />` into `frontend/index.html` head section and redeploy.
+   - Click **Verify** in Google Search Console.
+
+3. **Submit the XML Sitemap**:
+   - In the left sidebar of Google Search Console, click **Sitemaps** under *Indexing*.
+   - In the *Add a new sitemap* input box, enter: `sitemap.xml`.
+   - Click **Submit**. Google will queue `https://studyhub.online/sitemap.xml` for crawling.
+
+4. **URL Inspection**:
+   - Use the top search bar (**Inspect any URL in "studyhub.online"**) to test `https://studyhub.online`.
+   - Click **Test Live URL** to confirm that Googlebot can retrieve the page, render HTML, read metadata, and extract the JSON-LD structured data without crawl-blocking issues.
+   - Click **Request Indexing** to submit the fresh page for indexing.
+
+5. **Monitoring Indexing & Core Web Vitals**:
+   - **Page Indexing**: Check the *Pages* report periodically to see which public URLs have been indexed and verify that no private routes are accidentally included.
+   - **Core Web Vitals**: Monitor Largest Contentful Paint (LCP), Interaction to Next Paint (INP), and Cumulative Layout Shift (CLS) under the *Experience* tab.
+

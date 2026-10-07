@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { authApi } from '../services/auth.api';
@@ -13,25 +13,29 @@ import {
   ArrowLeft,
   RotateCw,
   CheckCircle2,
+  Check,
 } from 'lucide-react';
 import { SEO } from '../components/common/SEO';
 
 export const ForgotPassword = () => {
   const [step, setStep] = useState(1); // 1 = Enter Email, 2 = Enter Code, 3 = New Password, 4 = Success
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const digitInputRefs = useRef([]);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [countdown, setCountdown] = useState(0);
+  const [countdown, setCountdown] = useState(0); // Resend timer
+  const [expirySeconds, setExpirySeconds] = useState(300); // 5 min expiry
   const [devCode, setDevCode] = useState(null);
 
   const { success, error } = useToast();
   const navigate = useNavigate();
 
+  // Resend Countdown
   useEffect(() => {
     let timer;
     if (countdown > 0) {
@@ -39,6 +43,28 @@ export const ForgotPassword = () => {
     }
     return () => clearTimeout(timer);
   }, [countdown]);
+
+  // Expiry Countdown for Step 2
+  useEffect(() => {
+    let timer;
+    if (step === 2 && expirySeconds > 0) {
+      timer = setTimeout(() => setExpirySeconds(expirySeconds - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [step, expirySeconds]);
+
+  const formatTimer = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const maskEmail = (str) => {
+    if (!str || !str.includes('@')) return str;
+    const [user, domain] = str.split('@');
+    if (user.length <= 2) return `${user}***@${domain}`;
+    return `${user.substring(0, 2)}***${user.slice(-1)}@${domain}`;
+  };
 
   // Step 1: Request Reset Code
   const handleRequestCode = async (e) => {
@@ -62,9 +88,14 @@ export const ForgotPassword = () => {
       success('Password reset code sent to your email.');
       setStep(2);
       setCountdown(60);
+      setExpirySeconds(300);
+      setOtpDigits(['', '', '', '', '', '']);
       if (data.data?.devCode) {
         setDevCode(data.data.devCode);
       }
+      setTimeout(() => {
+        digitInputRefs.current[0]?.focus();
+      }, 100);
     } catch (err) {
       const msg = err.response?.data?.message || 'Failed to send reset code. Please try again.';
       setErrorMsg(msg);
@@ -74,20 +105,64 @@ export const ForgotPassword = () => {
     }
   };
 
+  // OTP Digits Handling
+  const handleDigitChange = (index, value) => {
+    const numericValue = value.replace(/\D/g, '');
+    const newDigits = [...otpDigits];
+
+    if (numericValue.length > 0) {
+      newDigits[index] = numericValue[numericValue.length - 1];
+      setOtpDigits(newDigits);
+      if (index < 5) {
+        digitInputRefs.current[index + 1]?.focus();
+      }
+    } else {
+      newDigits[index] = '';
+      setOtpDigits(newDigits);
+    }
+  };
+
+  const handleDigitKeyDown = (index, e) => {
+    if (e.key === 'Backspace') {
+      if (!otpDigits[index] && index > 0) {
+        digitInputRefs.current[index - 1]?.focus();
+      }
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      digitInputRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      digitInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleDigitPaste = (e) => {
+    e.preventDefault();
+    const pasteData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasteData) return;
+
+    const newDigits = [...otpDigits];
+    for (let i = 0; i < 6; i++) {
+      newDigits[i] = pasteData[i] || '';
+    }
+    setOtpDigits(newDigits);
+
+    const nextIndex = Math.min(pasteData.length, 5);
+    digitInputRefs.current[nextIndex]?.focus();
+  };
+
   // Step 2: Verify Reset Code
   const handleVerifyCode = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     setErrorMsg('');
 
-    const trimmedCode = code.trim();
-    if (!trimmedCode || trimmedCode.length < 6) {
-      setErrorMsg('Please enter the 6-digit verification code.');
+    const fullCode = otpDigits.join('');
+    if (fullCode.length !== 6) {
+      setErrorMsg('Please enter the complete 6-digit verification code.');
       return;
     }
 
     setLoading(true);
     try {
-      await authApi.verifyResetCode(email.trim(), trimmedCode);
+      await authApi.verifyResetCode(email.trim(), fullCode);
       success('Verification code confirmed.');
       setStep(3);
     } catch (err) {
@@ -114,9 +189,10 @@ export const ForgotPassword = () => {
       return;
     }
 
+    const fullCode = otpDigits.join('');
     setLoading(true);
     try {
-      await authApi.resetPassword(email.trim(), code.trim(), newPassword);
+      await authApi.resetPassword(email.trim(), fullCode, newPassword);
       success('Password updated successfully!');
       setStep(4);
     } catch (err) {
@@ -162,19 +238,59 @@ export const ForgotPassword = () => {
 
         {/* Card */}
         <div className="card p-8 bg-surface-50 dark:bg-surface-800 shadow-md border border-border-color">
-          {step !== 4 && (
-            <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-                {step === 1 && 'Reset your password'}
-                {step === 2 && 'Enter verification code'}
-                {step === 3 && 'Create new password'}
-              </h1>
-              <p className="mt-1 text-xs text-text-secondary">
-                {step === 1 && 'Enter your registered email and we will send you a verification code.'}
-                {step === 2 && 'Enter the 6-digit code sent to your email address.'}
-                {step === 3 && 'Choose a secure new password for your account.'}
-              </p>
-            </div>
+          {/* Header & Steps */}
+          {step < 4 && (
+            <>
+              <div className="text-center mb-6">
+                <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+                  {step === 1 && 'Reset your password'}
+                  {step === 2 && 'Verify Reset Code'}
+                  {step === 3 && 'Create New Password'}
+                </h1>
+                <p className="mt-1 text-xs text-text-secondary">
+                  {step === 1 && 'Enter your registered email to receive a 6-digit recovery code.'}
+                  {step === 2 && 'Enter the 6-digit code sent to your email address.'}
+                  {step === 3 && 'Choose a strong and secure new password for your account.'}
+                </p>
+              </div>
+
+              {/* Step Progress Indicator */}
+              <div className="flex items-center justify-between mb-8 max-w-xs mx-auto">
+                {[1, 2, 3].map((stepNumber, index) => (
+                  <div key={stepNumber} className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (stepNumber < step) {
+                          setErrorMsg('');
+                          setStep(stepNumber);
+                        }
+                      }}
+                      disabled={stepNumber > step}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition border ${
+                        step === stepNumber
+                          ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white shadow-xs'
+                          : step > stepNumber
+                          ? 'bg-neutral-700 text-white dark:bg-neutral-300 dark:text-neutral-900 border-neutral-700 dark:border-neutral-300 cursor-pointer'
+                          : 'bg-surface-200 dark:bg-surface-700 text-text-tertiary border-transparent'
+                      }`}
+                      title={`Step ${stepNumber}`}
+                    >
+                      {step > stepNumber ? '✓' : stepNumber}
+                    </button>
+                    {index < 2 && (
+                      <div
+                        className={`h-0.5 w-12 sm:w-16 mx-1 transition ${
+                          step > stepNumber
+                            ? 'bg-neutral-700 dark:bg-neutral-300'
+                            : 'bg-surface-200 dark:bg-surface-700'
+                        }`}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
 
           {errorMsg && (
@@ -225,94 +341,112 @@ export const ForgotPassword = () => {
             </form>
           )}
 
-          {/* STEP 2: Enter Verification Code */}
+          {/* STEP 2: Enter 6-Digit Code (Standardized 6-box input) */}
           {step === 2 && (
-            <form onSubmit={handleVerifyCode} className="space-y-4">
-              <div className="p-2.5 rounded-lg border border-border-color bg-surface-100 dark:bg-surface-700/50 flex items-center justify-between text-xs">
-                <span className="text-text-secondary">
-                  Sent to: <strong className="text-text-primary">{email}</strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep(1);
-                    setCode('');
-                    setErrorMsg('');
-                  }}
-                  className="font-semibold underline text-text-primary"
-                >
-                  Change
-                </button>
+            <div className="space-y-5">
+              {/* Email Pill Badge */}
+              <div className="flex items-center justify-center">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-border-color bg-surface-100 dark:bg-surface-800/80 text-text-primary text-xs font-medium shadow-2xs">
+                  <Mail size={13} className="text-text-secondary" />
+                  <span className="font-mono">{maskEmail(email)}</span>
+                </div>
               </div>
 
+              {/* Expiry Countdown */}
+              <p className="text-xs text-text-secondary text-center font-medium">
+                Code expires in:{' '}
+                <span className="font-mono font-bold text-text-primary">
+                  {formatTimer(expirySeconds)}
+                </span>
+              </p>
+
+              {/* Dev Mode Code Auto-Fill */}
               {devCode && (
-                <div className="p-2.5 rounded-lg border border-neutral-400 dark:border-neutral-600 bg-surface-200 dark:bg-surface-700 text-text-primary text-xs flex items-center justify-between">
-                  <span>Dev Mode Code: <strong>{devCode}</strong></span>
+                <div className="p-2.5 rounded-lg border border-border-color bg-surface-100 dark:bg-surface-800 text-text-primary text-xs flex items-center justify-between">
+                  <span>Dev Mode Code: <strong className="font-mono">{devCode}</strong></span>
                   <button
                     type="button"
-                    onClick={() => setCode(devCode)}
-                    className="font-bold underline"
+                    onClick={() => {
+                      const chars = devCode.split('').slice(0, 6);
+                      setOtpDigits(chars);
+                    }}
+                    className="font-bold underline hover:opacity-80"
                   >
                     Auto-Fill
                   </button>
                 </div>
               )}
 
-              <div>
-                <label className="label" htmlFor="reset-code">
-                  6-Digit Verification Code
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-tertiary">
-                    <KeyRound size={16} />
-                  </div>
-                  <input
-                    id="reset-code"
-                    type="text"
-                    maxLength={6}
-                    placeholder="••••••"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                    className="input-field pl-10 text-center tracking-widest font-mono text-lg font-bold"
-                    required
-                    autoFocus
-                  />
+              {/* 6 Individual Digit Inputs */}
+              <form onSubmit={handleVerifyCode} className="space-y-5">
+                <div
+                  className="flex justify-center items-center gap-2 sm:gap-3"
+                  onPaste={handleDigitPaste}
+                >
+                  {otpDigits.map((digit, idx) => (
+                    <input
+                      key={idx}
+                      ref={(el) => (digitInputRefs.current[idx] = el)}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleDigitChange(idx, e.target.value)}
+                      onKeyDown={(e) => handleDigitKeyDown(idx, e)}
+                      className="w-10 h-12 sm:w-12 sm:h-14 text-center text-lg sm:text-xl font-bold font-mono rounded-lg border border-border-color bg-surface-100 dark:bg-surface-700/60 text-text-primary focus:border-neutral-900 dark:focus:border-white focus:outline-none focus:ring-1 focus:ring-neutral-900 dark:focus:ring-white transition shadow-2xs"
+                      required
+                    />
+                  ))}
                 </div>
-              </div>
 
-              <div className="flex items-center justify-between text-xs">
-                {countdown > 0 ? (
-                  <span className="text-text-secondary">
-                    Resend code in <strong>{countdown}s</strong>
-                  </span>
-                ) : (
+                {/* Resend Action */}
+                <div className="flex items-center justify-between text-xs pt-1">
                   <button
                     type="button"
-                    onClick={handleRequestCode}
-                    disabled={loading}
-                    className="font-medium hover:underline flex items-center gap-1 text-text-primary"
+                    onClick={() => {
+                      setStep(1);
+                      setOtpDigits(['', '', '', '', '', '']);
+                      setErrorMsg('');
+                    }}
+                    className="font-medium underline text-text-secondary hover:text-text-primary"
                   >
-                    <RotateCw size={12} />
-                    Resend Code
+                    Change Email
                   </button>
-                )}
-              </div>
 
-              <button
-                type="submit"
-                disabled={loading || code.trim().length !== 6}
-                className="btn btn-primary w-full py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <ButtonLoader />
-                ) : (
-                  <>
-                    <CheckCircle2 size={16} />
-                    <span>Verify Code</span>
-                  </>
-                )}
-              </button>
-            </form>
+                  {countdown > 0 ? (
+                    <span className="text-text-secondary">
+                      Resend in <strong>{countdown}s</strong>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleRequestCode}
+                      disabled={loading}
+                      className="font-medium hover:underline flex items-center gap-1 text-text-primary"
+                    >
+                      <RotateCw size={12} />
+                      Resend Code
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || otpDigits.join('').length !== 6}
+                  className="btn btn-primary w-full py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <ButtonLoader />
+                  ) : (
+                    <>
+                      <CheckCircle2 size={16} />
+                      <span>Verify Code</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
           )}
 
           {/* STEP 3: Enter New Password */}

@@ -547,64 +547,70 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     }
   }, [roomId]);
 
-  // Toggle Camera
+  // Toggle Camera (Hardware release on turn-off, fresh acquire on turn-on)
   const toggleVideo = useCallback(async () => {
     try {
-      if (!cameraTrackRef.current) {
-        const videoStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 } },
-        });
-        const newTrack = videoStream.getVideoTracks()[0];
-        cameraTrackRef.current = newTrack;
-
-        if (!localStreamRef.current) {
-          localStreamRef.current = new MediaStream([newTrack]);
-        } else {
-          localStreamRef.current.addTrack(newTrack);
+      if (isVideoEnabled && cameraTrackRef.current) {
+        // Stop hardware track completely to turn off camera LED light
+        cameraTrackRef.current.stop();
+        if (localStreamRef.current) {
+          localStreamRef.current.removeTrack(cameraTrackRef.current);
+          setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
         }
+        cameraTrackRef.current = null;
+        setIsVideoEnabled(false);
 
-        setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
-
-        // If not actively screen sharing, send camera track to peers
+        // If not screen sharing, replace video track with null on all peers
         if (!isScreenSharingRef.current) {
           Object.values(peersRef.current).forEach((peer) => {
             const videoSender = getVideoSender(peer);
             if (videoSender) {
-              videoSender.replaceTrack(newTrack);
-            } else {
-              peer.addTrack(newTrack, localStreamRef.current);
+              videoSender.replaceTrack(null);
             }
           });
         }
 
-        setIsVideoEnabled(true);
-        socketRef.current?.emit('toggle-video', { roomId, enabled: true });
+        socketRef.current?.emit('toggle-video', { roomId, enabled: false });
         return;
       }
 
-      const newState = !cameraTrackRef.current.enabled;
-      cameraTrackRef.current.enabled = newState;
-      setIsVideoEnabled(newState);
+      // Re-acquire camera hardware track
+      const videoStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 } },
+      });
+      const newTrack = videoStream.getVideoTracks()[0];
+      if (!newTrack) return;
+      cameraTrackRef.current = newTrack;
 
-      // If not screen sharing, update track on peers
+      if (!localStreamRef.current) {
+        localStreamRef.current = new MediaStream([newTrack]);
+      } else {
+        // Remove any old video tracks first
+        localStreamRef.current.getVideoTracks().forEach((t) => localStreamRef.current.removeTrack(t));
+        localStreamRef.current.addTrack(newTrack);
+      }
+
+      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+
+      // If not actively screen sharing, send fresh camera track to all peers
       if (!isScreenSharingRef.current) {
-        const trackToSend = newState ? cameraTrackRef.current : null;
         Object.values(peersRef.current).forEach((peer) => {
           const videoSender = getVideoSender(peer);
           if (videoSender) {
-            videoSender.replaceTrack(trackToSend);
-          } else if (trackToSend) {
-            peer.addTrack(trackToSend, localStreamRef.current);
+            videoSender.replaceTrack(newTrack);
+          } else {
+            peer.addTrack(newTrack, localStreamRef.current);
           }
         });
       }
 
-      socketRef.current?.emit('toggle-video', { roomId, enabled: newState });
+      setIsVideoEnabled(true);
+      socketRef.current?.emit('toggle-video', { roomId, enabled: true });
     } catch (err) {
       console.warn('Camera toggle failed:', err);
       setMediaError('Camera permission denied or unavailable');
     }
-  }, [roomId]);
+  }, [roomId, isVideoEnabled]);
 
   // Stop Screen Share
   const stopScreenShare = useCallback(() => {

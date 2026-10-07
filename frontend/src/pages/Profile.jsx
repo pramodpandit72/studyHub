@@ -36,6 +36,18 @@ const EXPERIENCE_LEVELS = [
   'Advanced'
 ];
 
+const PREPARATION_OPTIONS = [
+  'B.Tech',
+  'MCA',
+  'UPSC',
+  'SSC',
+  'Banking',
+  'GATE',
+  'Placement Preparation',
+  'Programming',
+  'Other'
+];
+
 export const Profile = () => {
   const { user, updateUser } = useAuth();
   const { success, error } = useToast();
@@ -468,15 +480,20 @@ export const Profile = () => {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-tertiary">
                     <GraduationCap size={16} />
                   </div>
-                  <input
+                  <select
                     id="studyOrPreparation"
                     name="studyOrPreparation"
-                    type="text"
-                    placeholder="e.g. B.Tech / GATE / Full Stack Development"
                     value={formData.studyOrPreparation}
                     onChange={handleChange}
                     className="input-field pl-10 text-sm"
-                  />
+                  >
+                    {!PREPARATION_OPTIONS.includes(formData.studyOrPreparation) && formData.studyOrPreparation && (
+                      <option value={formData.studyOrPreparation}>{formData.studyOrPreparation}</option>
+                    )}
+                    {PREPARATION_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

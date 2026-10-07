@@ -474,7 +474,7 @@ export const MeetingRoom = () => {
           activePoll={activePoll}
           onCreatePoll={createPoll}
           onVotePoll={votePoll}
-          endPoll={endPoll}
+          onEndPoll={endPoll}
           currentUserId={user?._id}
         />
       </div>

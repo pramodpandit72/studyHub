@@ -15,10 +15,15 @@ export const VideoTile = ({
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      videoRef.current.play?.().catch((err) => {
+        // Autoplay may require interaction or is already active
+        console.debug('Video play catch:', err.message);
+      });
     }
   }, [stream]);
 
-  const hasActiveVideo = isVideoEnabled && stream && stream.getVideoTracks().length > 0;
+  const isPresenter = role === 'presenter';
+  const hasActiveVideo = (isVideoEnabled || isPresenter) && stream && stream.getVideoTracks().length > 0;
 
   return (
     <div className="relative w-full h-full min-h-[200px] bg-neutral-950 rounded-xl overflow-hidden flex items-center justify-center border border-neutral-800 shadow-md group">
@@ -28,10 +33,13 @@ export const VideoTile = ({
         autoPlay
         playsInline
         muted={isLocal}
-        className={`w-full h-full object-cover transition-opacity duration-200 ${
+        className={`w-full h-full ${
+          isPresenter ? 'object-contain' : 'object-cover'
+        } transition-opacity duration-200 ${
           hasActiveVideo ? 'opacity-100' : 'hidden'
-        } ${isLocal ? 'scale-x-[-1]' : ''}`}
+        } ${isLocal && !isPresenter ? 'scale-x-[-1]' : ''}`}
       />
+
 
       {/* Avatar Fallback when Video is off */}
       {!hasActiveVideo && (

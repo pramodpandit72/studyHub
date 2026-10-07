@@ -14,6 +14,7 @@ export const MeetingControls = ({
   isAudioEnabled,
   isVideoEnabled,
   isScreenSharing,
+  screenShareAllowed = true,
   isChatOpen,
   isParticipantsOpen,
   isPollOpen,
@@ -30,12 +31,28 @@ export const MeetingControls = ({
   onLeaveMeeting,
   onEndMeeting,
 }) => {
+  const canShareScreen = isHost || screenShareAllowed;
+
   return (
     <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-surface-50 dark:bg-neutral-900 border-t border-border-color dark:border-neutral-800 text-text-primary dark:text-white z-20">
-      {/* Left: Meeting Status Indicator */}
-      <div className="hidden sm:flex items-center gap-2 text-xs text-text-secondary dark:text-neutral-400">
-        <span className="w-2 h-2 rounded-full bg-neutral-900 dark:bg-white animate-pulse" />
-        <span>Connected</span>
+      {/* Left: Meeting Status Indicator & Participant Screen Share Permission */}
+      <div className="hidden sm:flex items-center gap-3 text-xs text-text-secondary dark:text-neutral-400">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-neutral-900 dark:bg-white animate-pulse" />
+          <span>Connected</span>
+        </div>
+
+        {!isHost && (
+          <div
+            className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+              canShareScreen
+                ? 'bg-surface-100 dark:bg-surface-800 text-text-primary border-border-color'
+                : 'bg-surface-200 dark:bg-surface-800/80 text-text-tertiary border-border-color'
+            }`}
+          >
+            Screen Sharing: {canShareScreen ? 'Allowed' : 'Not Allowed'}
+          </div>
+        )}
       </div>
 
       {/* Center: Audio / Video / Screen controls */}
@@ -74,13 +91,22 @@ export const MeetingControls = ({
           className={`p-3 rounded-full transition shadow-xs border ${
             isScreenSharing
               ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-black dark:border-white'
+              : !canShareScreen
+              ? 'bg-surface-100 text-text-tertiary border-border-color opacity-60 cursor-not-allowed dark:bg-neutral-900 dark:text-neutral-500'
               : 'bg-surface-200 hover:bg-surface-300 text-text-primary border-border-color dark:bg-neutral-800 dark:hover:bg-neutral-700 dark:text-white dark:border-neutral-700'
           }`}
-          title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
+          title={
+            isScreenSharing
+              ? 'Stop Screen Share'
+              : canShareScreen
+              ? 'Share Screen (Allowed)'
+              : 'Screen Sharing: Not Allowed'
+          }
           aria-label={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
         >
           <MonitorUp size={20} />
         </button>
+
 
         <div className="h-6 w-px bg-border-color dark:bg-neutral-800 mx-1 hidden sm:block" />
 

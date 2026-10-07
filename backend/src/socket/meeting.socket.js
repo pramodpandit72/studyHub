@@ -1,9 +1,10 @@
 import jwt from 'jsonwebtoken';
 import env from '../config/env.js';
 import User from '../models/User.js';
+import Meeting from '../models/Meeting.js';
 import attendanceService from '../services/attendance.service.js';
 
-const activeRooms = new Map();
+const activeRooms = new Map(); // roomId -> { roomId, meetingId, hostUserId, participants: Map, permissions, activeScreenSharer }
 const activePolls = new Map();
 
 export const setupMeetingSocket = (io) => {
@@ -26,43 +27,106 @@ export const setupMeetingSocket = (io) => {
   io.on('connection', (socket) => {
     console.log(`User connected: ${socket.user.name} (${socket.id})`);
 
+    const verifyHost = (roomId) => {
+      const room = activeRooms.get(roomId);
+      if (!room) return false;
+      return Boolean(room.hostUserId && room.hostUserId === socket.user._id.toString());
+    };
+
     socket.on('join-room', async ({ meetingId, meetingCode }) => {
       const roomId = meetingCode || meetingId;
+      if (!roomId) return;
+
       socket.join(roomId);
       socket.currentRoomId = roomId;
       socket.currentMeetingId = meetingId;
 
+      // Look up meeting in DB to identify the host and default permissions
+      let meeting = null;
+      try {
+        if (meetingId) {
+          meeting = await Meeting.findById(meetingId).select('host participantPermissions').lean();
+        }
+        if (!meeting && meetingCode) {
+          meeting = await Meeting.findOne({ meetingCode: meetingCode.toUpperCase() }).select('host participantPermissions').lean();
+        }
+      } catch (err) {
+        console.warn('Error fetching meeting info in socket:', err.message);
+      }
+
+      const hostUserId = meeting?.host?.toString() || '';
+      const isHost = Boolean(hostUserId && hostUserId === socket.user._id.toString());
+
       if (!activeRooms.has(roomId)) {
-        activeRooms.set(roomId, new Map());
+        activeRooms.set(roomId, {
+          roomId,
+          meetingId: meeting?._id?.toString() || meetingId,
+          hostUserId,
+          participants: new Map(),
+          permissions: {
+            canShareScreen: meeting?.participantPermissions?.canShareScreen ?? true,
+          },
+          activeScreenSharer: null,
+        });
       }
 
       const room = activeRooms.get(roomId);
-      room.set(socket.id, {
+      if (hostUserId && !room.hostUserId) {
+        room.hostUserId = hostUserId;
+      }
+
+      // Cleanup any previous socket connection for the same user (handles refreshes / reconnects without ghosts)
+      for (const [prevSocketId, p] of room.participants) {
+        if (p.userId === socket.user._id.toString() && prevSocketId !== socket.id) {
+          room.participants.delete(prevSocketId);
+          socket.to(roomId).emit('participant-left', { socketId: prevSocketId });
+        }
+      }
+
+      const canShareScreen = isHost ? true : Boolean(room.permissions.canShareScreen);
+
+      const participant = {
         userId: socket.user._id.toString(),
         name: socket.user.name,
-        role: socket.user.role,
+        role: isHost ? 'host' : socket.user.role,
         socketId: socket.id,
         audio: false,
         video: false,
-      });
+        isHost,
+        canShareScreen,
+      };
+
+      room.participants.set(socket.id, participant);
 
       if (meetingId) {
-        await attendanceService.recordJoin(meetingId, socket.user._id);
+        try {
+          await attendanceService.recordJoin(meetingId, socket.user._id);
+        } catch (e) {
+          console.warn('Record join error:', e.message);
+        }
       }
 
+      // Notify existing users of new join
       socket.to(roomId).emit('user-joined', {
         socketId: socket.id,
-        user: { _id: socket.user._id, name: socket.user.name, role: socket.user.role },
+        user: participant,
       });
 
-      const participants = Array.from(room.values());
-      socket.emit('room-participants', participants);
+      // Send participant list and room state to newly joined user
+      const participantsList = Array.from(room.participants.values());
+      socket.emit('room-participants', participantsList);
+      socket.emit('room-permissions', {
+        permissions: room.permissions,
+        activeScreenSharer: room.activeScreenSharer,
+        isHost,
+      });
 
       if (activePolls.has(roomId)) {
         socket.emit('active-poll', activePolls.get(roomId));
       }
     });
 
+    // WebRTC Signaling
     socket.on('offer', ({ to, offer }) => {
       socket.to(to).emit('offer', { from: socket.id, offer });
     });
@@ -75,30 +139,185 @@ export const setupMeetingSocket = (io) => {
       socket.to(to).emit('ice-candidate', { from: socket.id, candidate });
     });
 
+    // Participant Media Toggles
     socket.on('toggle-audio', ({ roomId, enabled }) => {
       const room = activeRooms.get(roomId);
-      if (room?.has(socket.id)) {
-        room.get(socket.id).audio = enabled;
-        socket.to(roomId).emit('participant-audio-toggle', { socketId: socket.id, enabled });
+      if (room?.participants?.has(socket.id)) {
+        room.participants.get(socket.id).audio = Boolean(enabled);
+        socket.to(roomId).emit('participant-audio-toggle', { socketId: socket.id, enabled: Boolean(enabled) });
       }
     });
 
     socket.on('toggle-video', ({ roomId, enabled }) => {
       const room = activeRooms.get(roomId);
-      if (room?.has(socket.id)) {
-        room.get(socket.id).video = enabled;
-        socket.to(roomId).emit('participant-video-toggle', { socketId: socket.id, enabled });
+      if (room?.participants?.has(socket.id)) {
+        room.participants.get(socket.id).video = Boolean(enabled);
+        socket.to(roomId).emit('participant-video-toggle', { socketId: socket.id, enabled: Boolean(enabled) });
       }
     });
 
+    // Screen Share Events
     socket.on('screen-share-started', ({ roomId }) => {
-      socket.to(roomId).emit('screen-share-started', { socketId: socket.id, user: socket.user });
+      const room = activeRooms.get(roomId);
+      if (!room) return;
+
+      const participant = room.participants.get(socket.id);
+      if (!participant) return;
+
+      // Check permission
+      if (!participant.isHost && !participant.canShareScreen) {
+        socket.emit('screen-share-denied', { message: 'Screen sharing is not permitted by host.' });
+        return;
+      }
+
+      room.activeScreenSharer = {
+        socketId: socket.id,
+        userId: socket.user._id.toString(),
+        name: socket.user.name,
+        isHost: participant.isHost,
+      };
+
+      io.to(roomId).emit('screen-share-started', {
+        socketId: socket.id,
+        user: {
+          _id: socket.user._id,
+          name: socket.user.name,
+          role: socket.user.role,
+        },
+      });
     });
 
     socket.on('screen-share-stopped', ({ roomId }) => {
-      socket.to(roomId).emit('screen-share-stopped', { socketId: socket.id });
+      const room = activeRooms.get(roomId);
+      if (room?.activeScreenSharer?.socketId === socket.id) {
+        room.activeScreenSharer = null;
+      }
+      io.to(roomId).emit('screen-share-stopped', { socketId: socket.id });
     });
 
+    // Host Controls: Mute Participant
+    socket.on('mute-participant', ({ roomId, targetSocketId }) => {
+      if (!verifyHost(roomId)) {
+        socket.emit('error-message', { message: 'Host permission required to mute participants.' });
+        return;
+      }
+
+      const room = activeRooms.get(roomId);
+      if (room?.participants?.has(targetSocketId)) {
+        room.participants.get(targetSocketId).audio = false;
+      }
+
+      io.to(targetSocketId).emit('force-mute');
+      io.to(roomId).emit('participant-audio-toggle', { socketId: targetSocketId, enabled: false });
+    });
+
+    // Host Controls: Request Participant to Unmute
+    socket.on('request-unmute', ({ roomId, targetSocketId }) => {
+      if (!verifyHost(roomId)) {
+        socket.emit('error-message', { message: 'Host permission required to request unmute.' });
+        return;
+      }
+
+      io.to(targetSocketId).emit('unmute-requested', {
+        hostName: socket.user.name,
+      });
+    });
+
+    // Host Controls: Screen Sharing Permissions
+    socket.on('set-screen-share-permission', ({ roomId, targetSocketId, allowed }) => {
+      if (!verifyHost(roomId)) {
+        socket.emit('error-message', { message: 'Host permission required to manage screen sharing.' });
+        return;
+      }
+
+      const room = activeRooms.get(roomId);
+      if (!room) return;
+
+      const isAllowed = Boolean(allowed);
+
+      if (targetSocketId) {
+        // Per-participant permission
+        const participant = room.participants.get(targetSocketId);
+        if (participant) {
+          participant.canShareScreen = isAllowed;
+          io.to(roomId).emit('participant-permission-updated', {
+            socketId: targetSocketId,
+            canShareScreen: isAllowed,
+          });
+
+          // If active screen sharer was revoked, stop their share immediately
+          if (!isAllowed && room.activeScreenSharer?.socketId === targetSocketId) {
+            io.to(targetSocketId).emit('force-stop-screen-share');
+            room.activeScreenSharer = null;
+            io.to(roomId).emit('screen-share-stopped', { socketId: targetSocketId });
+          }
+        }
+      } else {
+        // Room-wide permission
+        room.permissions.canShareScreen = isAllowed;
+        for (const p of room.participants.values()) {
+          if (!p.isHost) {
+            p.canShareScreen = isAllowed;
+          }
+        }
+
+        io.to(roomId).emit('room-permissions-updated', {
+          permissions: room.permissions,
+          participants: Array.from(room.participants.values()),
+        });
+
+        // Revoke active share if participant is sharing and no longer allowed
+        if (!isAllowed && room.activeScreenSharer && !room.activeScreenSharer.isHost) {
+          const target = room.activeScreenSharer.socketId;
+          io.to(target).emit('force-stop-screen-share');
+          room.activeScreenSharer = null;
+          io.to(roomId).emit('screen-share-stopped', { socketId: target });
+        }
+      }
+    });
+
+    // Host Controls: Stop active participant's screen share directly
+    socket.on('host-stop-screen-share', ({ roomId, targetSocketId }) => {
+      if (!verifyHost(roomId)) {
+        socket.emit('error-message', { message: 'Host permission required to stop screen sharing.' });
+        return;
+      }
+
+      const room = activeRooms.get(roomId);
+      if (!room) return;
+
+      io.to(targetSocketId).emit('force-stop-screen-share');
+      if (room.activeScreenSharer?.socketId === targetSocketId) {
+        room.activeScreenSharer = null;
+      }
+      io.to(roomId).emit('screen-share-stopped', { socketId: targetSocketId });
+    });
+
+    // Host Controls: Remove Participant
+    socket.on('remove-participant', ({ roomId, targetSocketId }) => {
+      if (!verifyHost(roomId)) {
+        socket.emit('error-message', { message: 'Host permission required to remove participants.' });
+        return;
+      }
+
+      io.to(targetSocketId).emit('removed-from-meeting');
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (targetSocket) {
+        targetSocket.leave(roomId);
+      }
+
+      const room = activeRooms.get(roomId);
+      if (room) {
+        if (room.activeScreenSharer?.socketId === targetSocketId) {
+          room.activeScreenSharer = null;
+          io.to(roomId).emit('screen-share-stopped', { socketId: targetSocketId });
+        }
+        room.participants.delete(targetSocketId);
+        io.to(roomId).emit('participant-left', { socketId: targetSocketId });
+      }
+    });
+
+    // Chat
     socket.on('send-message', ({ roomId, message }) => {
       io.to(roomId).emit('new-message', {
         id: Date.now().toString(),
@@ -106,24 +325,6 @@ export const setupMeetingSocket = (io) => {
         message,
         timestamp: new Date().toISOString(),
       });
-    });
-
-    socket.on('mute-participant', ({ roomId, targetSocketId }) => {
-      socket.to(targetSocketId).emit('force-mute');
-      socket.to(roomId).emit('participant-audio-toggle', { socketId: targetSocketId, enabled: false });
-    });
-
-    socket.on('remove-participant', ({ roomId, targetSocketId }) => {
-      io.to(targetSocketId).emit('removed-from-meeting');
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
-      if (targetSocket) {
-        targetSocket.leave(roomId);
-      }
-      const room = activeRooms.get(roomId);
-      if (room) {
-        room.delete(targetSocketId);
-        io.to(roomId).emit('participant-left', { socketId: targetSocketId });
-      }
     });
 
     // Polling Socket Events
@@ -144,7 +345,7 @@ export const setupMeetingSocket = (io) => {
           id: socket.user._id.toString(),
           name: socket.user.name,
         },
-        voters: {}, // userId -> optionId
+        voters: {},
         totalVotes: 0,
         isActive: true,
         createdAt: new Date().toISOString(),
@@ -179,53 +380,85 @@ export const setupMeetingSocket = (io) => {
       io.to(roomId).emit('poll-closed', poll);
     });
 
+    // Host End Meeting
     socket.on('end-meeting', async ({ roomId, meetingId }) => {
-      io.to(roomId).emit('meeting-ended');
-      const room = activeRooms.get(roomId);
-      if (room) {
-        activeRooms.delete(roomId);
+      if (!verifyHost(roomId)) {
+        socket.emit('error-message', { message: 'Only host can end the meeting.' });
+        return;
       }
+
+      io.to(roomId).emit('meeting-ended');
+      activeRooms.delete(roomId);
       activePolls.delete(roomId);
+
       const mId = meetingId || socket.currentMeetingId;
       if (mId) {
-        await attendanceService.finalizeMeetingAttendance(mId);
+        try {
+          await attendanceService.finalizeMeetingAttendance(mId);
+        } catch (e) {
+          console.warn('Finalize attendance error:', e.message);
+        }
       }
     });
 
+    // Leave Room
     socket.on('leave-room', async ({ roomId, meetingId }) => {
-      socket.leave(roomId);
       const room = activeRooms.get(roomId);
       if (room) {
-        room.delete(socket.id);
-        socket.to(roomId).emit('participant-left', { socketId: socket.id });
-        if (room.size === 0) {
+        if (room.activeScreenSharer?.socketId === socket.id) {
+          room.activeScreenSharer = null;
+          io.to(roomId).emit('screen-share-stopped', { socketId: socket.id });
+        }
+        room.participants.delete(socket.id);
+        io.to(roomId).emit('participant-left', { socketId: socket.id });
+        if (room.participants.size === 0) {
           activeRooms.delete(roomId);
           activePolls.delete(roomId);
         }
       }
+      socket.leave(roomId);
+
       const mId = meetingId || socket.currentMeetingId;
       if (mId) {
-        await attendanceService.recordLeave(mId, socket.user._id);
+        try {
+          await attendanceService.recordLeave(mId, socket.user._id);
+        } catch (e) {
+          console.warn('Record leave error:', e.message);
+        }
       }
       socket.currentRoomId = null;
       socket.currentMeetingId = null;
     });
 
+    // Disconnect
     socket.on('disconnect', async () => {
       console.log(`User disconnected: ${socket.user.name} (${socket.id})`);
       if (socket.currentMeetingId) {
-        await attendanceService.recordLeave(socket.currentMeetingId, socket.user._id);
+        try {
+          await attendanceService.recordLeave(socket.currentMeetingId, socket.user._id);
+        } catch (e) {
+          // ignore
+        }
       }
+
       for (const [roomId, room] of activeRooms) {
-        if (room.has(socket.id)) {
-          room.delete(socket.id);
-          socket.to(roomId).emit('participant-left', { socketId: socket.id });
-          if (room.size === 0) {
+        if (room.participants.has(socket.id)) {
+          if (room.activeScreenSharer?.socketId === socket.id) {
+            room.activeScreenSharer = null;
+            io.to(roomId).emit('screen-share-stopped', { socketId: socket.id });
+          }
+          room.participants.delete(socket.id);
+          io.to(roomId).emit('participant-left', { socketId: socket.id });
+          if (room.participants.size === 0) {
             activeRooms.delete(roomId);
             activePolls.delete(roomId);
           }
         }
       }
     });
+
+
+
   });
 };
+

@@ -16,57 +16,71 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [screenShareAllowed, setScreenShareAllowed] = useState(true);
+  const [activeScreenShare, setActiveScreenShare] = useState(null); // { socketId, user }
+  const [unmuteRequest, setUnmuteRequest] = useState(null); // { hostName }
   const [participants, setParticipants] = useState([]);
   const [messages, setMessages] = useState([]);
   const [activePoll, setActivePoll] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState('connecting'); // connecting, connected, disconnected
+  const [connectionStatus, setConnectionStatus] = useState('connecting'); // connecting, connected, disconnected, error
   const [mediaError, setMediaError] = useState(null);
 
   const localStreamRef = useRef(null);
-  const peersRef = useRef({});
+  const cameraTrackRef = useRef(null);
+  const audioTrackRef = useRef(null);
   const screenTrackRef = useRef(null);
+  const peersRef = useRef({});
+  const iceCandidatesQueueRef = useRef({}); // { socketId: RTCIceCandidateInit[] }
+  const isScreenSharingRef = useRef(false);
+  const isVideoEnabledRef = useRef(false);
+  const isAudioEnabledRef = useRef(false);
   const socketRef = useRef(null);
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
 
-  // Initialize Local Media Stream
-  const initLocalStream = useCallback(async (withVideo = false, withAudio = false) => {
-    try {
-      setMediaError(null);
-      // If requested devices
-      if (!withVideo && !withAudio) {
-        // Dummy/empty stream if user hasn't enabled yet or permissions pending
-        setLocalStream(null);
-        localStreamRef.current = null;
-        return null;
+  isScreenSharingRef.current = isScreenSharing;
+  isVideoEnabledRef.current = isVideoEnabled;
+  isAudioEnabledRef.current = isAudioEnabled;
+
+  // Flush queued ICE candidates after remote description is set
+  const flushQueuedIceCandidates = useCallback(async (remoteSocketId, peer) => {
+    const queue = iceCandidatesQueueRef.current[remoteSocketId];
+    if (queue && queue.length > 0) {
+      while (queue.length > 0) {
+        const candidate = queue.shift();
+        try {
+          await peer.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          console.warn('Error adding queued ICE candidate:', err);
+        }
       }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: withVideo ? { width: { ideal: 640 }, height: { ideal: 480 } } : false,
-        audio: withAudio,
-      });
-
-      localStreamRef.current = stream;
-      setLocalStream(stream);
-      setIsAudioEnabled(withAudio);
-      setIsVideoEnabled(withVideo);
-
-      // Add tracks to any existing peer connections
-      Object.values(peersRef.current).forEach((peer) => {
-        stream.getTracks().forEach((track) => {
-          peer.addTrack(track, stream);
-        });
-      });
-
-      return stream;
-    } catch (err) {
-      console.warn('getUserMedia error:', err);
-      setMediaError(err.message || 'Could not access camera/microphone');
-      return null;
     }
   }, []);
 
-  // Create Peer Connection
+  // Close and clean up a single peer connection
+  const closePeer = useCallback((remoteSocketId) => {
+    if (peersRef.current[remoteSocketId]) {
+      try {
+        peersRef.current[remoteSocketId].close();
+      } catch (e) {
+        // ignore
+      }
+      delete peersRef.current[remoteSocketId];
+      delete iceCandidatesQueueRef.current[remoteSocketId];
+      setPeers((prev) => {
+        const next = { ...prev };
+        delete next[remoteSocketId];
+        return next;
+      });
+      setRemoteStreams((prev) => {
+        const next = { ...prev };
+        delete next[remoteSocketId];
+        return next;
+      });
+    }
+  }, []);
+
+  // Create or retrieve Peer Connection with transceivers & listeners
   const createPeerConnection = useCallback((remoteSocketId) => {
     if (peersRef.current[remoteSocketId]) {
       return peersRef.current[remoteSocketId];
@@ -74,16 +88,30 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
     const peer = new RTCPeerConnection(ICE_SERVERS);
     peersRef.current[remoteSocketId] = peer;
+    iceCandidatesQueueRef.current[remoteSocketId] = [];
     setPeers((prev) => ({ ...prev, [remoteSocketId]: peer }));
 
-    // Send local tracks
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => {
-        peer.addTrack(track, localStreamRef.current);
-      });
+    // Attach existing audio track or add transceiver
+    if (audioTrackRef.current && localStreamRef.current) {
+      peer.addTrack(audioTrackRef.current, localStreamRef.current);
+    } else {
+      peer.addTransceiver('audio', { direction: 'sendrecv' });
     }
 
-    // ICE Candidate
+    // Attach active video track (screen or camera) or add transceiver
+    const activeVideoTrack = isScreenSharingRef.current
+      ? screenTrackRef.current
+      : isVideoEnabledRef.current
+      ? cameraTrackRef.current
+      : null;
+
+    if (activeVideoTrack && localStreamRef.current) {
+      peer.addTrack(activeVideoTrack, localStreamRef.current);
+    } else {
+      peer.addTransceiver('video', { direction: 'sendrecv' });
+    }
+
+    // ICE Candidate generation
     peer.onicecandidate = (event) => {
       if (event.candidate && socketRef.current) {
         socketRef.current.emit('ice-candidate', {
@@ -95,38 +123,71 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
     // Remote Track received
     peer.ontrack = (event) => {
-      const [stream] = event.streams;
-      if (stream) {
-        setRemoteStreams((prev) => ({
-          ...prev,
-          [remoteSocketId]: stream,
-        }));
-      }
+      const stream = event.streams[0] || new MediaStream([event.track]);
+      setRemoteStreams((prev) => ({
+        ...prev,
+        [remoteSocketId]: stream,
+      }));
     };
 
     peer.onconnectionstatechange = () => {
-      if (peer.connectionState === 'disconnected' || peer.connectionState === 'failed' || peer.connectionState === 'closed') {
+      if (peer.connectionState === 'failed') {
+        console.warn(`Peer connection failed with ${remoteSocketId}`);
         closePeer(remoteSocketId);
       }
     };
 
     return peer;
-  }, []);
+  }, [closePeer]);
 
-  const closePeer = useCallback((remoteSocketId) => {
-    if (peersRef.current[remoteSocketId]) {
-      peersRef.current[remoteSocketId].close();
-      delete peersRef.current[remoteSocketId];
-      setPeers((prev) => {
-        const next = { ...prev };
-        delete next[remoteSocketId];
-        return next;
+  // Initialize Local Media Stream
+  const initLocalStream = useCallback(async (withVideo = false, withAudio = false) => {
+    try {
+      setMediaError(null);
+      if (!withVideo && !withAudio) {
+        return null;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: withVideo ? { width: { ideal: 640 }, height: { ideal: 480 } } : false,
+        audio: withAudio,
       });
-      setRemoteStreams((prev) => {
-        const next = { ...prev };
-        delete next[remoteSocketId];
-        return next;
+
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+
+      if (withAudio) {
+        const aTrack = stream.getAudioTracks()[0];
+        audioTrackRef.current = aTrack || null;
+        setIsAudioEnabled(true);
+        socketRef.current?.emit('toggle-audio', { roomId, enabled: true });
+      }
+      if (withVideo) {
+        const vTrack = stream.getVideoTracks()[0];
+        cameraTrackRef.current = vTrack || null;
+        setIsVideoEnabled(true);
+        socketRef.current?.emit('toggle-video', { roomId, enabled: true });
+      }
+
+
+      // Add tracks to any existing peer connections
+      Object.values(peersRef.current).forEach((peer) => {
+        stream.getTracks().forEach((track) => {
+          const senders = peer.getSenders();
+          const existingSender = senders.find((s) => s.track && s.track.kind === track.kind);
+          if (existingSender) {
+            existingSender.replaceTrack(track);
+          } else {
+            peer.addTrack(track, stream);
+          }
+        });
       });
+
+      return stream;
+    } catch (err) {
+      console.warn('getUserMedia error:', err);
+      setMediaError(err.message || 'Could not access camera/microphone');
+      return null;
     }
   }, []);
 
@@ -150,16 +211,50 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       setConnectionStatus('disconnected');
     });
 
+    // Room state and participants list
     socket.on('room-participants', (currentParticipants) => {
       setParticipants(currentParticipants);
       setConnectionStatus('connected');
     });
 
-    // When someone joins, create offer
+    socket.on('room-permissions', ({ permissions, activeScreenSharer, isHost }) => {
+      if (isHost) {
+        setScreenShareAllowed(true);
+      } else if (permissions?.canShareScreen !== undefined) {
+        setScreenShareAllowed(Boolean(permissions.canShareScreen));
+      }
+      if (activeScreenSharer) {
+        setActiveScreenShare(activeScreenSharer);
+      }
+    });
+
+    socket.on('room-permissions-updated', ({ permissions, participants: updatedParticipants }) => {
+      if (updatedParticipants) {
+        setParticipants(updatedParticipants);
+      }
+      const myId = currentUser?._id?.toString();
+      const me = updatedParticipants?.find((p) => p.userId === myId);
+      if (me) {
+        setScreenShareAllowed(Boolean(me.canShareScreen));
+      } else if (permissions?.canShareScreen !== undefined) {
+        setScreenShareAllowed(Boolean(permissions.canShareScreen));
+      }
+    });
+
+    socket.on('participant-permission-updated', ({ socketId, canShareScreen }) => {
+      setParticipants((prev) =>
+        prev.map((p) => (p.socketId === socketId ? { ...p, canShareScreen } : p))
+      );
+      if (socket.id === socketId) {
+        setScreenShareAllowed(Boolean(canShareScreen));
+      }
+    });
+
+    // When someone joins, existing users create an offer to them
     socket.on('user-joined', async ({ socketId, user }) => {
       setParticipants((prev) => {
         if (prev.some((p) => p.socketId === socketId)) return prev;
-        return [...prev, { ...user, socketId, audio: false, video: false }];
+        return [...prev, { ...user, socketId }];
       });
 
       const peer = createPeerConnection(socketId);
@@ -177,6 +272,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       const peer = createPeerConnection(from);
       try {
         await peer.setRemoteDescription(new RTCSessionDescription(offer));
+        await flushQueuedIceCandidates(from, peer);
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
         socket.emit('answer', { to: from, answer });
@@ -191,6 +287,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       if (peer) {
         try {
           await peer.setRemoteDescription(new RTCSessionDescription(answer));
+          await flushQueuedIceCandidates(from, peer);
         } catch (err) {
           console.error('Failed to set remote answer:', err);
         }
@@ -200,12 +297,17 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     // Handle ICE Candidate
     socket.on('ice-candidate', async ({ from, candidate }) => {
       const peer = peersRef.current[from];
-      if (peer && candidate) {
+      if (peer && peer.remoteDescription && peer.remoteDescription.type) {
         try {
           await peer.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
           console.error('Failed to add ice candidate:', err);
         }
+      } else {
+        if (!iceCandidatesQueueRef.current[from]) {
+          iceCandidatesQueueRef.current[from] = [];
+        }
+        iceCandidatesQueueRef.current[from].push(candidate);
       }
     });
 
@@ -222,9 +324,58 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       );
     });
 
+    // Participant Left
     socket.on('participant-left', ({ socketId }) => {
       closePeer(socketId);
       setParticipants((prev) => prev.filter((p) => p.socketId !== socketId));
+      setActiveScreenShare((curr) => (curr?.socketId === socketId ? null : curr));
+    });
+
+    // Screen Share start / stop notifications
+    socket.on('screen-share-started', ({ socketId, user }) => {
+      setActiveScreenShare({ socketId, user });
+    });
+
+    socket.on('screen-share-stopped', ({ socketId }) => {
+      setActiveScreenShare((curr) => (curr?.socketId === socketId ? null : curr));
+    });
+
+    // Force Stop Screen Share (e.g. host revoked permission)
+    socket.on('force-stop-screen-share', () => {
+      if (isScreenSharingRef.current) {
+        if (screenTrackRef.current) {
+          screenTrackRef.current.stop();
+          screenTrackRef.current = null;
+        }
+        setIsScreenSharing(false);
+
+        // Restore camera track to peers if camera was active
+        const restoreTrack = isVideoEnabledRef.current && cameraTrackRef.current ? cameraTrackRef.current : null;
+        Object.values(peersRef.current).forEach((peer) => {
+          const senders = peer.getSenders();
+          const videoSender = senders.find((s) => s.track?.kind === 'video' || s.transceiver?.receiver?.track?.kind === 'video');
+          if (videoSender) {
+            videoSender.replaceTrack(restoreTrack);
+          }
+        });
+
+        socketRef.current?.emit('screen-share-stopped', { roomId });
+        callbacksRef.current?.onScreenShareRevoked?.();
+      }
+    });
+
+    // Force Mute by Host
+    socket.on('force-mute', () => {
+      if (audioTrackRef.current) {
+        audioTrackRef.current.enabled = false;
+      }
+      setIsAudioEnabled(false);
+      callbacksRef.current?.onMutedByHost?.();
+    });
+
+    // Request Unmute from Host
+    socket.on('unmute-requested', ({ hostName }) => {
+      setUnmuteRequest({ hostName: hostName || 'The host' });
     });
 
     // Chat message
@@ -233,42 +384,22 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     });
 
     // Poll events
-    socket.on('active-poll', (poll) => {
-      setActivePoll(poll);
-    });
+    socket.on('active-poll', (poll) => setActivePoll(poll));
+    socket.on('poll-published', (poll) => setActivePoll(poll));
+    socket.on('poll-updated', (poll) => setActivePoll(poll));
+    socket.on('poll-closed', (poll) => setActivePoll(poll));
 
-    socket.on('poll-published', (poll) => {
-      setActivePoll(poll);
-    });
-
-    socket.on('poll-updated', (poll) => {
-      setActivePoll(poll);
-    });
-
-    socket.on('poll-closed', (poll) => {
-      setActivePoll(poll);
-    });
-
-    // Force Mute
-    socket.on('force-mute', () => {
-      if (localStreamRef.current) {
-        const audioTracks = localStreamRef.current.getAudioTracks();
-        audioTracks.forEach((t) => (t.enabled = false));
-      }
-      setIsAudioEnabled(false);
-      if (socketRef.current) {
-        socketRef.current.emit('toggle-audio', { roomId, enabled: false });
-      }
-    });
-
-    // Meeting ended by host
+    // Meeting lifecycle
     socket.on('meeting-ended', () => {
       callbacksRef.current?.onMeetingEnded?.();
     });
 
-    // Participant removed by host
     socket.on('removed-from-meeting', () => {
       callbacksRef.current?.onRemovedFromMeeting?.();
+    });
+
+    socket.on('error-message', ({ message }) => {
+      setMediaError(message);
     });
 
     // Join room if already connected
@@ -284,6 +415,9 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         socketRef.current.off('disconnect');
         socketRef.current.off('connect_error');
         socketRef.current.off('room-participants');
+        socketRef.current.off('room-permissions');
+        socketRef.current.off('room-permissions-updated');
+        socketRef.current.off('participant-permission-updated');
         socketRef.current.off('user-joined');
         socketRef.current.off('offer');
         socketRef.current.off('answer');
@@ -291,14 +425,19 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         socketRef.current.off('participant-audio-toggle');
         socketRef.current.off('participant-video-toggle');
         socketRef.current.off('participant-left');
+        socketRef.current.off('screen-share-started');
+        socketRef.current.off('screen-share-stopped');
+        socketRef.current.off('force-stop-screen-share');
+        socketRef.current.off('force-mute');
+        socketRef.current.off('unmute-requested');
         socketRef.current.off('new-message');
         socketRef.current.off('active-poll');
         socketRef.current.off('poll-published');
         socketRef.current.off('poll-updated');
         socketRef.current.off('poll-closed');
-        socketRef.current.off('force-mute');
         socketRef.current.off('meeting-ended');
         socketRef.current.off('removed-from-meeting');
+        socketRef.current.off('error-message');
       }
 
       // Cleanup local tracks
@@ -312,15 +451,15 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       // Close all peer connections
       Object.keys(peersRef.current).forEach((id) => closePeer(id));
     };
-  }, [roomId, meetingId, createPeerConnection, closePeer]);
+  }, [roomId, meetingId, currentUser, createPeerConnection, closePeer, flushQueuedIceCandidates]);
 
   // Toggle Microphone
   const toggleAudio = useCallback(async () => {
     try {
-      if (!localStreamRef.current || localStreamRef.current.getAudioTracks().length === 0) {
-        // Need to request audio
+      if (!audioTrackRef.current) {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const newTrack = audioStream.getAudioTracks()[0];
+        audioTrackRef.current = newTrack;
 
         if (!localStreamRef.current) {
           localStreamRef.current = new MediaStream([newTrack]);
@@ -329,8 +468,16 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         }
 
         setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+
+        // Replace or add track to peers
         Object.values(peersRef.current).forEach((peer) => {
-          peer.addTrack(newTrack, localStreamRef.current);
+          const senders = peer.getSenders();
+          const audioSender = senders.find((s) => s.track?.kind === 'audio' || s.transceiver?.receiver?.track?.kind === 'audio');
+          if (audioSender) {
+            audioSender.replaceTrack(newTrack);
+          } else {
+            peer.addTrack(newTrack, localStreamRef.current);
+          }
         });
 
         setIsAudioEnabled(true);
@@ -338,9 +485,8 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         return;
       }
 
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      const newState = !audioTrack.enabled;
-      audioTrack.enabled = newState;
+      const newState = !audioTrackRef.current.enabled;
+      audioTrackRef.current.enabled = newState;
       setIsAudioEnabled(newState);
       socketRef.current?.emit('toggle-audio', { roomId, enabled: newState });
     } catch (err) {
@@ -352,11 +498,12 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
   // Toggle Camera
   const toggleVideo = useCallback(async () => {
     try {
-      if (!localStreamRef.current || localStreamRef.current.getVideoTracks().length === 0) {
+      if (!cameraTrackRef.current) {
         const videoStream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 640 }, height: { ideal: 480 } },
         });
         const newTrack = videoStream.getVideoTracks()[0];
+        cameraTrackRef.current = newTrack;
 
         if (!localStreamRef.current) {
           localStreamRef.current = new MediaStream([newTrack]);
@@ -365,19 +512,41 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         }
 
         setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
-        Object.values(peersRef.current).forEach((peer) => {
-          peer.addTrack(newTrack, localStreamRef.current);
-        });
+
+        // If not actively screen sharing, send camera track to peers
+        if (!isScreenSharingRef.current) {
+          Object.values(peersRef.current).forEach((peer) => {
+            const senders = peer.getSenders();
+            const videoSender = senders.find((s) => s.track?.kind === 'video' || s.transceiver?.receiver?.track?.kind === 'video');
+            if (videoSender) {
+              videoSender.replaceTrack(newTrack);
+            } else {
+              peer.addTrack(newTrack, localStreamRef.current);
+            }
+          });
+        }
 
         setIsVideoEnabled(true);
         socketRef.current?.emit('toggle-video', { roomId, enabled: true });
         return;
       }
 
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      const newState = !videoTrack.enabled;
-      videoTrack.enabled = newState;
+      const newState = !cameraTrackRef.current.enabled;
+      cameraTrackRef.current.enabled = newState;
       setIsVideoEnabled(newState);
+
+      // If not screen sharing, update track on peers
+      if (!isScreenSharingRef.current) {
+        const trackToSend = newState ? cameraTrackRef.current : null;
+        Object.values(peersRef.current).forEach((peer) => {
+          const senders = peer.getSenders();
+          const videoSender = senders.find((s) => s.track?.kind === 'video' || s.transceiver?.receiver?.track?.kind === 'video');
+          if (videoSender) {
+            videoSender.replaceTrack(trackToSend);
+          }
+        });
+      }
+
       socketRef.current?.emit('toggle-video', { roomId, enabled: newState });
     } catch (err) {
       console.warn('Camera toggle failed:', err);
@@ -385,33 +554,49 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     }
   }, [roomId]);
 
-  // Toggle Screen Share
-  const toggleScreenShare = useCallback(async () => {
-    if (isScreenSharing) {
-      // Stop screen share
-      if (screenTrackRef.current) {
-        screenTrackRef.current.stop();
-        screenTrackRef.current = null;
-      }
-      setIsScreenSharing(false);
-      socketRef.current?.emit('screen-share-stopped', { roomId });
-      return;
+  // Stop Screen Share
+  const stopScreenShare = useCallback(() => {
+    if (screenTrackRef.current) {
+      screenTrackRef.current.stop();
+      screenTrackRef.current = null;
     }
+    setIsScreenSharing(false);
 
+    // Restore camera track to peers if camera is enabled
+    const restoreTrack = isVideoEnabledRef.current && cameraTrackRef.current ? cameraTrackRef.current : null;
+    Object.values(peersRef.current).forEach((peer) => {
+      const senders = peer.getSenders();
+      const videoSender = senders.find((s) => s.track?.kind === 'video' || s.transceiver?.receiver?.track?.kind === 'video');
+      if (videoSender) {
+        videoSender.replaceTrack(restoreTrack);
+      }
+    });
+
+    socketRef.current?.emit('screen-share-stopped', { roomId });
+  }, [roomId]);
+
+  // Start Screen Share
+  const startScreenShare = useCallback(async () => {
     try {
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      setMediaError(null);
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false,
+      });
+
       const screenTrack = displayStream.getVideoTracks()[0];
+      if (!screenTrack) return;
       screenTrackRef.current = screenTrack;
 
+      // Handle browser's native stop sharing banner
       screenTrack.onended = () => {
-        setIsScreenSharing(false);
-        socketRef.current?.emit('screen-share-stopped', { roomId });
+        stopScreenShare();
       };
 
-      // Replace or add track to peers
+      // Replace video sender on all peers with the screen track
       Object.values(peersRef.current).forEach((peer) => {
         const senders = peer.getSenders();
-        const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+        const videoSender = senders.find((s) => s.track?.kind === 'video' || s.transceiver?.receiver?.track?.kind === 'video');
         if (videoSender) {
           videoSender.replaceTrack(screenTrack);
         } else {
@@ -423,11 +608,35 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       socketRef.current?.emit('screen-share-started', { roomId });
     } catch (err) {
       console.warn('Screen share error:', err);
-      if (err.name !== 'NotAllowedError') {
-        setMediaError('Screen sharing not supported or canceled');
+      if (err.name === 'NotAllowedError') {
+        // User cancelled display selection dialog - normal browser action
+        return;
       }
+      setMediaError('Screen sharing failed or canceled');
     }
-  }, [isScreenSharing, roomId]);
+  }, [roomId, stopScreenShare]);
+
+  // Toggle Screen Share
+  const toggleScreenShare = useCallback(async () => {
+    if (isScreenSharing) {
+      stopScreenShare();
+    } else {
+      await startScreenShare();
+    }
+  }, [isScreenSharing, stopScreenShare, startScreenShare]);
+
+  // Accept Unmute Request
+  const acceptUnmuteRequest = useCallback(async () => {
+    setUnmuteRequest(null);
+    if (!isAudioEnabled) {
+      await toggleAudio();
+    }
+  }, [isAudioEnabled, toggleAudio]);
+
+  // Decline Unmute Request
+  const declineUnmuteRequest = useCallback(() => {
+    setUnmuteRequest(null);
+  }, []);
 
   // Send Chat Message
   const sendMessage = useCallback((text) => {
@@ -438,20 +647,42 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     });
   }, [roomId]);
 
-  // Host Mute Participant
+  // Host Controls: Mute Participant
   const muteParticipant = useCallback((targetSocketId) => {
     socketRef.current?.emit('mute-participant', { roomId, targetSocketId });
   }, [roomId]);
 
-  // Host Remove Participant
+  // Host Controls: Request Unmute
+  const requestUnmute = useCallback((targetSocketId) => {
+    socketRef.current?.emit('request-unmute', { roomId, targetSocketId });
+  }, [roomId]);
+
+  // Host Controls: Screen Share Permission (Target or Room-wide)
+  const setScreenSharePermission = useCallback((targetSocketId, allowed) => {
+    socketRef.current?.emit('set-screen-share-permission', {
+      roomId,
+      targetSocketId,
+      allowed,
+    });
+  }, [roomId]);
+
+  // Host Controls: Revoke Active Screen Share
+  const stopParticipantScreenShare = useCallback((targetSocketId) => {
+    socketRef.current?.emit('host-stop-screen-share', {
+      roomId,
+      targetSocketId,
+    });
+  }, [roomId]);
+
+  // Host Controls: Remove Participant
   const removeParticipant = useCallback((targetSocketId) => {
     socketRef.current?.emit('remove-participant', { roomId, targetSocketId });
   }, [roomId]);
 
-  // Host End Meeting
+  // Host Controls: End Meeting
   const endMeetingForAll = useCallback(() => {
-    socketRef.current?.emit('end-meeting', { roomId });
-  }, [roomId]);
+    socketRef.current?.emit('end-meeting', { roomId, meetingId });
+  }, [roomId, meetingId]);
 
   // Polling actions
   const createPoll = useCallback(({ question, options }) => {
@@ -475,14 +706,24 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     isAudioEnabled,
     isVideoEnabled,
     isScreenSharing,
+    screenShareAllowed,
+    activeScreenShare,
+    unmuteRequest,
     connectionStatus,
     mediaError,
     initLocalStream,
     toggleAudio,
     toggleVideo,
     toggleScreenShare,
+    startScreenShare,
+    stopScreenShare,
+    acceptUnmuteRequest,
+    declineUnmuteRequest,
     sendMessage,
     muteParticipant,
+    requestUnmute,
+    setScreenSharePermission,
+    stopParticipantScreenShare,
     removeParticipant,
     endMeetingForAll,
     createPoll,
@@ -490,3 +731,4 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     endPoll,
   };
 };
+

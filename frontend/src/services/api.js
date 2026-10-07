@@ -19,9 +19,17 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url || '';
+    const isAuthEndpoint =
+      url.includes('/auth/login') ||
+      url.includes('/auth/signup') ||
+      url.includes('/auth/forgot-password') ||
+      url.includes('/auth/verify');
+
+    if (error.response?.status === 401 && !isAuthEndpoint) {
       localStorage.removeItem('studyhub_token');
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/signup' && window.location.pathname !== '/') {
+      const currentPath = window.location.pathname.replace(/\/+$/, '') || '/';
+      if (currentPath !== '/login' && currentPath !== '/signup' && currentPath !== '/') {
         window.location.href = '/login';
       }
     }

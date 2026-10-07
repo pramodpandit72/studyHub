@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -13,16 +13,30 @@ export const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const isSubmittingRef = useRef(false);
 
-  const { login } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
   const { success, error } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
 
   const from = location.state?.from?.pathname || '/dashboard';
 
+  // If already logged in, redirect directly to dashboard
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, user, navigate, from]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Prevent duplicate rapid click race conditions
+    if (isSubmittingRef.current || loading) {
+      return;
+    }
+
     setErrorMsg('');
 
     const trimmedEmail = email.trim();
@@ -31,7 +45,8 @@ export const Login = () => {
       return;
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
       setErrorMsg('Please enter a valid email address.');
       return;
     }
@@ -41,18 +56,37 @@ export const Login = () => {
       return;
     }
 
+    isSubmittingRef.current = true;
     setLoading(true);
+
     try {
-      const { data } = await authApi.login(trimmedEmail, password);
-      login(data.data.token, data.data.user);
-      success('Logged in successfully!');
-      navigate(from, { replace: true });
+      const { data } = await authApi.login(trimmedEmail.toLowerCase(), password);
+
+      if (data?.data?.token && data?.data?.user) {
+        login(data.data.token, data.data.user);
+        success('Logged in successfully!');
+        navigate(from, { replace: true });
+      } else {
+        throw new Error('Malformed login response from server.');
+      }
     } catch (err) {
-      const msg = err.response?.data?.message || 'Invalid email or password. Please try again.';
+      let msg = 'Invalid email or password. Please try again.';
+
+      if (!err.response) {
+        msg = 'Unable to connect to the server. Please check your internet connection.';
+      } else if (err.response.status === 401) {
+        msg = err.response.data?.message || 'Invalid email or password.';
+      } else if (err.response.status === 429) {
+        msg = 'Too many login attempts. Please wait a moment and try again.';
+      } else if (err.response.data?.message) {
+        msg = err.response.data.message;
+      }
+
       setErrorMsg(msg);
       error(msg);
     } finally {
       setLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -87,13 +121,13 @@ export const Login = () => {
           </div>
 
           {errorMsg && (
-            <div className="mb-4 error-box">
+            <div className="mb-4 error-box" role="alert">
               <span className="font-bold">[!]</span>
               <span>{errorMsg}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {/* Email Field */}
             <div>
               <label className="label" htmlFor="email">
@@ -106,13 +140,14 @@ export const Login = () => {
                 <input
                   id="email"
                   type="email"
-                  placeholder="Email"
+                  placeholder="name@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="input-field pl-10 text-sm"
                   required
                   autoFocus
                   autoComplete="email"
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -137,12 +172,13 @@ export const Login = () => {
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Password"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="input-field pl-10 pr-10 text-sm"
                   required
                   autoComplete="current-password"
+                  disabled={loading}
                 />
                 <button
                   type="button"
@@ -150,6 +186,7 @@ export const Login = () => {
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-tertiary hover:text-text-primary"
                   tabIndex={-1}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  disabled={loading}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -159,11 +196,14 @@ export const Login = () => {
             {/* Login Button */}
             <button
               type="submit"
-              disabled={loading || !email || !password}
-              className="btn btn-primary w-full py-2.5 text-sm font-semibold flex items-center justify-center gap-2 mt-2"
+              disabled={loading || !email.trim() || !password}
+              className="btn btn-primary w-full py-2.5 text-sm font-semibold flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
             >
               {loading ? (
-                <ButtonLoader />
+                <>
+                  <ButtonLoader />
+                  <span>Logging in...</span>
+                </>
               ) : (
                 <>
                   <span>Login</span>

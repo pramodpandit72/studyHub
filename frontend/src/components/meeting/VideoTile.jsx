@@ -27,7 +27,7 @@ export const VideoTile = ({
 
   return (
     <div className="relative w-full h-full min-h-[200px] bg-neutral-950 rounded-xl overflow-hidden flex items-center justify-center border border-neutral-800 shadow-md group">
-      {/* Video Element */}
+      {/* Video Element (Kept active in DOM with opacity-0 so remote audio continues playing when video is off) */}
       <video
         ref={videoRef}
         autoPlay
@@ -36,9 +36,10 @@ export const VideoTile = ({
         className={`w-full h-full ${
           isPresenter ? 'object-contain' : 'object-cover'
         } transition-opacity duration-200 ${
-          hasActiveVideo ? 'opacity-100' : 'hidden'
+          hasActiveVideo ? 'opacity-100 relative z-0' : 'opacity-0 pointer-events-none absolute inset-0'
         } ${isLocal && !isPresenter ? 'scale-x-[-1]' : ''}`}
       />
+
 
 
       {/* Avatar Fallback when Video is off */}

@@ -16,6 +16,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [screenStream, setScreenStream] = useState(null); // Local display MediaStream
   const [screenShareAllowed, setScreenShareAllowed] = useState(true);
   const [activeScreenShare, setActiveScreenShare] = useState(null); // { socketId, user }
   const [unmuteRequest, setUnmuteRequest] = useState(null); // { hostName }
@@ -41,6 +42,27 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
   isScreenSharingRef.current = isScreenSharing;
   isVideoEnabledRef.current = isVideoEnabled;
   isAudioEnabledRef.current = isAudioEnabled;
+
+  // Reliable Sender finders using Transceivers (handles null track states)
+  const getVideoSender = (peer) => {
+    if (!peer) return null;
+    const transceivers = peer.getTransceivers ? peer.getTransceivers() : [];
+    const vt = transceivers.find(
+      (t) => t.receiver?.track?.kind === 'video' || t.sender?.track?.kind === 'video'
+    );
+    if (vt?.sender) return vt.sender;
+    return peer.getSenders?.().find((s) => s.track && s.track.kind === 'video') || null;
+  };
+
+  const getAudioSender = (peer) => {
+    if (!peer) return null;
+    const transceivers = peer.getTransceivers ? peer.getTransceivers() : [];
+    const at = transceivers.find(
+      (t) => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio'
+    );
+    if (at?.sender) return at.sender;
+    return peer.getSenders?.().find((s) => s.track && s.track.kind === 'audio') || null;
+  };
 
   // Flush queued ICE candidates after remote description is set
   const flushQueuedIceCandidates = useCallback(async (remoteSocketId, peer) => {
@@ -88,12 +110,15 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
     const peer = new RTCPeerConnection(ICE_SERVERS);
     peersRef.current[remoteSocketId] = peer;
-    iceCandidatesQueueRef.current[remoteSocketId] = [];
+    if (!iceCandidatesQueueRef.current[remoteSocketId]) {
+      iceCandidatesQueueRef.current[remoteSocketId] = [];
+    }
     setPeers((prev) => ({ ...prev, [remoteSocketId]: peer }));
 
     // Attach existing audio track or add transceiver
-    if (audioTrackRef.current && localStreamRef.current) {
-      peer.addTrack(audioTrackRef.current, localStreamRef.current);
+    if (audioTrackRef.current) {
+      const audioStreamToSend = localStreamRef.current || new MediaStream([audioTrackRef.current]);
+      peer.addTrack(audioTrackRef.current, audioStreamToSend);
     } else {
       peer.addTransceiver('audio', { direction: 'sendrecv' });
     }
@@ -105,8 +130,11 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       ? cameraTrackRef.current
       : null;
 
-    if (activeVideoTrack && localStreamRef.current) {
-      peer.addTrack(activeVideoTrack, localStreamRef.current);
+    if (activeVideoTrack) {
+      const videoStreamToSend = isScreenSharingRef.current && screenTrackRef.current
+        ? (screenStream || new MediaStream([activeVideoTrack]))
+        : (localStreamRef.current || new MediaStream([activeVideoTrack]));
+      peer.addTrack(activeVideoTrack, videoStreamToSend);
     } else {
       peer.addTransceiver('video', { direction: 'sendrecv' });
     }
@@ -121,14 +149,33 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       }
     };
 
-    // Remote Track received
+    // Remote Track received - merge all active tracks cleanly
     peer.ontrack = (event) => {
-      const stream = event.streams[0] || new MediaStream([event.track]);
-      setRemoteStreams((prev) => ({
-        ...prev,
-        [remoteSocketId]: stream,
-      }));
+      setRemoteStreams((prev) => {
+        const existing = prev[remoteSocketId] || new MediaStream();
+        const incomingTracks = event.streams && event.streams[0] ? event.streams[0].getTracks() : [event.track];
+
+        incomingTracks.forEach((track) => {
+          if (!track) return;
+          // Remove any obsolete or ended tracks of the same kind so HTML5 video plays current track
+          existing.getTracks().forEach((oldTrack) => {
+            if (oldTrack.kind === track.kind && (oldTrack.id !== track.id || oldTrack.readyState === 'ended')) {
+              existing.removeTrack(oldTrack);
+            }
+          });
+          if (!existing.getTracks().some((t) => t.id === track.id)) {
+            existing.addTrack(track);
+          }
+        });
+
+        return {
+          ...prev,
+          [remoteSocketId]: new MediaStream(existing.getTracks()),
+        };
+      });
     };
+
+
 
     peer.onconnectionstatechange = () => {
       if (peer.connectionState === 'failed') {
@@ -173,15 +220,15 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       // Add tracks to any existing peer connections
       Object.values(peersRef.current).forEach((peer) => {
         stream.getTracks().forEach((track) => {
-          const senders = peer.getSenders();
-          const existingSender = senders.find((s) => s.track && s.track.kind === track.kind);
-          if (existingSender) {
-            existingSender.replaceTrack(track);
+          const sender = track.kind === 'video' ? getVideoSender(peer) : getAudioSender(peer);
+          if (sender) {
+            sender.replaceTrack(track);
           } else {
             peer.addTrack(track, stream);
           }
         });
       });
+
 
       return stream;
     } catch (err) {
@@ -271,6 +318,10 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     socket.on('offer', async ({ from, offer }) => {
       const peer = createPeerConnection(from);
       try {
+        if (peer.signalingState === 'have-local-offer') {
+          // Glare resolution: rollback local offer to accept incoming offer
+          await peer.setLocalDescription({ type: 'rollback' });
+        }
         await peer.setRemoteDescription(new RTCSessionDescription(offer));
         await flushQueuedIceCandidates(from, peer);
         const answer = await peer.createAnswer();
@@ -284,7 +335,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     // Handle Answer
     socket.on('answer', async ({ from, answer }) => {
       const peer = peersRef.current[from];
-      if (peer) {
+      if (peer && peer.signalingState === 'have-local-offer') {
         try {
           await peer.setRemoteDescription(new RTCSessionDescription(answer));
           await flushQueuedIceCandidates(from, peer);
@@ -293,6 +344,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         }
       }
     });
+
 
     // Handle ICE Candidate
     socket.on('ice-candidate', async ({ from, candidate }) => {
@@ -347,13 +399,13 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
           screenTrackRef.current.stop();
           screenTrackRef.current = null;
         }
+        setScreenStream(null);
         setIsScreenSharing(false);
 
         // Restore camera track to peers if camera was active
         const restoreTrack = isVideoEnabledRef.current && cameraTrackRef.current ? cameraTrackRef.current : null;
         Object.values(peersRef.current).forEach((peer) => {
-          const senders = peer.getSenders();
-          const videoSender = senders.find((s) => s.track?.kind === 'video' || s.transceiver?.receiver?.track?.kind === 'video');
+          const videoSender = getVideoSender(peer);
           if (videoSender) {
             videoSender.replaceTrack(restoreTrack);
           }
@@ -471,14 +523,14 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
         // Replace or add track to peers
         Object.values(peersRef.current).forEach((peer) => {
-          const senders = peer.getSenders();
-          const audioSender = senders.find((s) => s.track?.kind === 'audio' || s.transceiver?.receiver?.track?.kind === 'audio');
+          const audioSender = getAudioSender(peer);
           if (audioSender) {
             audioSender.replaceTrack(newTrack);
           } else {
             peer.addTrack(newTrack, localStreamRef.current);
           }
         });
+
 
         setIsAudioEnabled(true);
         socketRef.current?.emit('toggle-audio', { roomId, enabled: true });
@@ -516,8 +568,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         // If not actively screen sharing, send camera track to peers
         if (!isScreenSharingRef.current) {
           Object.values(peersRef.current).forEach((peer) => {
-            const senders = peer.getSenders();
-            const videoSender = senders.find((s) => s.track?.kind === 'video' || s.transceiver?.receiver?.track?.kind === 'video');
+            const videoSender = getVideoSender(peer);
             if (videoSender) {
               videoSender.replaceTrack(newTrack);
             } else {
@@ -539,10 +590,11 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       if (!isScreenSharingRef.current) {
         const trackToSend = newState ? cameraTrackRef.current : null;
         Object.values(peersRef.current).forEach((peer) => {
-          const senders = peer.getSenders();
-          const videoSender = senders.find((s) => s.track?.kind === 'video' || s.transceiver?.receiver?.track?.kind === 'video');
+          const videoSender = getVideoSender(peer);
           if (videoSender) {
             videoSender.replaceTrack(trackToSend);
+          } else if (trackToSend) {
+            peer.addTrack(trackToSend, localStreamRef.current);
           }
         });
       }
@@ -560,13 +612,13 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       screenTrackRef.current.stop();
       screenTrackRef.current = null;
     }
+    setScreenStream(null);
     setIsScreenSharing(false);
 
     // Restore camera track to peers if camera is enabled
     const restoreTrack = isVideoEnabledRef.current && cameraTrackRef.current ? cameraTrackRef.current : null;
     Object.values(peersRef.current).forEach((peer) => {
-      const senders = peer.getSenders();
-      const videoSender = senders.find((s) => s.track?.kind === 'video' || s.transceiver?.receiver?.track?.kind === 'video');
+      const videoSender = getVideoSender(peer);
       if (videoSender) {
         videoSender.replaceTrack(restoreTrack);
       }
@@ -587,6 +639,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       const screenTrack = displayStream.getVideoTracks()[0];
       if (!screenTrack) return;
       screenTrackRef.current = screenTrack;
+      setScreenStream(displayStream);
 
       // Handle browser's native stop sharing banner
       screenTrack.onended = () => {
@@ -595,8 +648,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
       // Replace video sender on all peers with the screen track
       Object.values(peersRef.current).forEach((peer) => {
-        const senders = peer.getSenders();
-        const videoSender = senders.find((s) => s.track?.kind === 'video' || s.transceiver?.receiver?.track?.kind === 'video');
+        const videoSender = getVideoSender(peer);
         if (videoSender) {
           videoSender.replaceTrack(screenTrack);
         } else {
@@ -615,6 +667,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       setMediaError('Screen sharing failed or canceled');
     }
   }, [roomId, stopScreenShare]);
+
 
   // Toggle Screen Share
   const toggleScreenShare = useCallback(async () => {
@@ -699,6 +752,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
   return {
     localStream,
+    screenStream,
     remoteStreams,
     participants,
     messages,
@@ -707,6 +761,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     isVideoEnabled,
     isScreenSharing,
     screenShareAllowed,
+
     activeScreenShare,
     unmuteRequest,
     connectionStatus,

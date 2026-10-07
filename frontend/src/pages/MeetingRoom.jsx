@@ -68,9 +68,11 @@ export const MeetingRoom = () => {
   // WebRTC Hook
   const {
     localStream,
+    screenStream,
     remoteStreams,
     participants,
     messages,
+
     activePoll,
     isAudioEnabled,
     isVideoEnabled,
@@ -286,38 +288,53 @@ export const MeetingRoom = () => {
               {/* Featured Screen Share Tile */}
               <div className="flex-1 relative bg-neutral-950 rounded-xl overflow-hidden border border-neutral-800 flex items-center justify-center min-h-[350px]">
                 {isScreenSharing ? (
-                  /* Local user presenting */
-                  <div className="flex flex-col items-center justify-center text-center p-6 space-y-4">
-                    <div className="w-16 h-16 rounded-full bg-neutral-900 border border-neutral-700 flex items-center justify-center text-white">
-                      <MonitorUp size={32} />
+                  /* Local user presenting live screen */
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    <VideoTile
+                      stream={screenStream}
+                      name="Your Screen (Presenting)"
+                      role="presenter"
+                      isAudioEnabled={false}
+                      isVideoEnabled={true}
+                      isLocal={true}
+                      isHost={isHost}
+                    />
+                    {/* Top presentation label */}
+                    <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
+                      <span className="px-2.5 py-1 bg-neutral-900/90 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 border border-neutral-700 backdrop-blur-xs">
+                        <Radio size={12} className="animate-pulse" />
+                        You are presenting
+                      </span>
                     </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-white">
-                        You are sharing your screen
-                      </h3>
-                      <p className="text-xs text-neutral-400 mt-1">
-                        All participants can see your shared screen or window.
-                      </p>
+
+                    {/* Stop sharing button */}
+                    <div className="absolute top-3 right-3 z-20">
+                      <button
+                        onClick={stopScreenShare}
+                        className="px-3 py-1.5 bg-neutral-900/90 hover:bg-neutral-800 text-white text-xs font-semibold rounded-md border border-neutral-700 flex items-center gap-1.5 shadow-md transition"
+                        title="Stop sharing your screen"
+                      >
+                        <MonitorOff size={14} />
+                        <span>Stop Sharing</span>
+                      </button>
                     </div>
-                    <button
-                      onClick={stopScreenShare}
-                      className="px-4 py-2 bg-white text-black hover:bg-neutral-200 rounded-lg text-xs font-semibold flex items-center gap-2 transition"
-                    >
-                      <MonitorOff size={16} />
-                      <span>Stop Sharing</span>
-                    </button>
                   </div>
                 ) : (
+
                   /* Remote user presenting */
                   <div className="relative w-full h-full flex items-center justify-center">
                     <VideoTile
                       stream={remoteStreams[activeScreenShare.socketId]}
                       name={`${activeScreenShare.user?.name || 'Participant'}'s Screen`}
                       role="presenter"
-                      isAudioEnabled={false}
+                      isAudioEnabled={
+                        participants.find((p) => p.socketId === activeScreenShare.socketId)?.audio || false
+                      }
                       isVideoEnabled={true}
                       isLocal={false}
-                      isHost={false}
+                      isHost={
+                        participants.find((p) => p.socketId === activeScreenShare.socketId)?.isHost || false
+                      }
                     />
                     {/* Top presentation label */}
                     <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
@@ -359,24 +376,25 @@ export const MeetingRoom = () => {
                   />
                 </div>
 
-                {/* Remote Participant Tiles */}
-                {activeRemoteEntries.map(([socketId, stream]) => {
-                  const participant = participants.find((p) => p.socketId === socketId);
-                  // Don't duplicate the screen sharer stream if they're featured above
-                  return (
-                    <div key={socketId} className="w-48 lg:w-full h-32 shrink-0">
-                      <VideoTile
-                        stream={stream}
-                        name={participant?.name || 'Participant'}
-                        role={participant?.role || 'participant'}
-                        isAudioEnabled={participant?.audio || false}
-                        isVideoEnabled={participant?.video || false}
-                        isLocal={false}
-                        isHost={participant?.isHost || participant?.role === 'host' || participant?.role === 'Teacher'}
-                      />
-                    </div>
-                  );
-                })}
+                {/* Remote Participant Tiles (exclude active presenter to prevent duplicate tile and audio echo) */}
+                {activeRemoteEntries
+                  .filter(([socketId]) => !activeScreenShare || activeScreenShare.socketId !== socketId)
+                  .map(([socketId, stream]) => {
+                    const participant = participants.find((p) => p.socketId === socketId);
+                    return (
+                      <div key={socketId} className="w-48 lg:w-full h-32 shrink-0">
+                        <VideoTile
+                          stream={stream}
+                          name={participant?.name || 'Participant'}
+                          role={participant?.role || 'participant'}
+                          isAudioEnabled={participant?.audio || false}
+                          isVideoEnabled={participant?.video || false}
+                          isLocal={false}
+                          isHost={participant?.isHost || participant?.role === 'host' || participant?.role === 'Teacher'}
+                        />
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           ) : (

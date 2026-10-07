@@ -37,7 +37,7 @@ const emailService = {
           code: otp,
           reset_code: otp,
           passcode: otp,
-          message: `Your viMeet account verification code is: ${otp}. It will expire in 10 minutes. Please enter this code to complete your registration.`,
+          message: `Your StudyHub account verification code is: ${otp}. It will expire in 10 minutes. Please enter this code to complete your registration.`,
         },
       };
 
@@ -49,7 +49,7 @@ const emailService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'viMeet-Backend/1.0',
+          'User-Agent': 'StudyHub-Backend/1.0',
         },
         body: JSON.stringify(payload),
       });
@@ -103,7 +103,7 @@ const emailService = {
           reset_code: resetCode,
           code: resetCode,
           passcode: resetCode,
-          message: `Your viMeet password reset verification code is: ${resetCode}. It will expire in ${env.RESET_TOKEN_EXPIRY_MINUTES || 15} minutes. If you did not request this, please ignore this email.`,
+          message: `Your StudyHub password reset verification code is: ${resetCode}. It will expire in ${env.RESET_TOKEN_EXPIRY_MINUTES || 15} minutes. If you did not request this, please ignore this email.`,
         },
       };
 
@@ -115,7 +115,7 @@ const emailService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'viMeet-Backend/1.0',
+          'User-Agent': 'StudyHub-Backend/1.0',
         },
         body: JSON.stringify(payload),
       });

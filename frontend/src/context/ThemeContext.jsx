@@ -10,7 +10,7 @@ export const useTheme = () => {
 
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('vimeet_theme') || 'light';
+    return localStorage.getItem('studyhub_theme') || localStorage.getItem('vimeet_theme') || 'light';
   });
 
   useEffect(() => {
@@ -20,7 +20,7 @@ export const ThemeProvider = ({ children }) => {
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('vimeet_theme', theme);
+    localStorage.setItem('studyhub_theme', theme);
   }, [theme]);
 
   const toggleTheme = useCallback(() => {

@@ -46,7 +46,7 @@ app.use(generalLimiter);
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'viMeet Backend API is live and operational.',
+    message: 'StudyHub Backend API is live and operational.',
     version: '1.0.0',
     endpoints: {
       health: '/api/health',
@@ -57,11 +57,11 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api', (req, res) => {
-  res.json({ success: true, message: 'viMeet API root.' });
+  res.json({ success: true, message: 'StudyHub API root.' });
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ success: true, message: 'viMeet API is running.' });
+  res.json({ success: true, message: 'StudyHub API is running.' });
 });
 
 app.use('/api/auth', authRoutes);

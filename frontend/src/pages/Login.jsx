@@ -73,7 +73,7 @@ export const Login = () => {
         <div className="card p-8 bg-surface-50 dark:bg-surface-800 shadow-md border border-border-color">
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-              Log In to viMeet
+              Log In to StudyHub
             </h1>
             <p className="mt-1 text-xs text-text-secondary">
               Enter your email and password to access your account

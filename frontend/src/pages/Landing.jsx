@@ -31,7 +31,7 @@ export const Landing = () => {
           </h1>
 
           <p className="mt-6 text-base sm:text-lg text-text-secondary max-w-2xl mx-auto leading-relaxed">
-            viMeet delivers clear video meetings, simple scheduling, and automated attendance tracking designed for everyone.
+            StudyHub delivers clear video meetings, simple scheduling, and automated attendance tracking designed for everyone.
           </p>
 
           {/* Quick Actions / Join Form */}
@@ -125,7 +125,7 @@ export const Landing = () => {
       <section className="py-16 px-4 sm:px-6 lg:px-8 border-y border-border-color bg-surface-100/50 dark:bg-surface-800/40">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-xl sm:text-2xl font-bold text-text-primary">How viMeet Works</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-text-primary">How StudyHub Works</h2>
             <p className="text-xs sm:text-sm text-text-secondary mt-1">Join or start a meeting in three simple steps</p>
           </div>
 
@@ -170,12 +170,21 @@ export const Landing = () => {
           Simple video meetings without unnecessary complications.
         </p>
         <div className="mt-6 flex justify-center gap-4">
-          <Link to="/signup" className="btn btn-primary btn-md">
-            Create Account
-          </Link>
-          <Link to="/login" className="btn btn-secondary btn-md">
-            Log In
-          </Link>
+          {isAuthenticated ? (
+            <Link to="/dashboard" className="btn btn-primary btn-md flex items-center gap-2">
+              <span>Go to Dashboard</span>
+              <ArrowRight size={16} />
+            </Link>
+          ) : (
+            <>
+              <Link to="/signup" className="btn btn-primary btn-md">
+                Create Account
+              </Link>
+              <Link to="/login" className="btn btn-secondary btn-md">
+                Log In
+              </Link>
+            </>
+          )}
         </div>
       </section>
     </div>

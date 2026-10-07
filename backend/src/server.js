@@ -22,7 +22,7 @@ setupMeetingSocket(io);
 const start = async () => {
   await connectDB();
   httpServer.listen(env.PORT, () => {
-    console.log(`viMeet server running on port ${env.PORT}`);
+    console.log(`StudyHub server running on port ${env.PORT}`);
     console.log(`Environment: ${env.NODE_ENV}`);
   });
 };

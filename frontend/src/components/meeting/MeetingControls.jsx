@@ -163,7 +163,7 @@ export const MeetingControls = ({
 
       {/* Right spacer */}
       <div className="hidden sm:block text-xs text-text-secondary dark:text-neutral-400">
-        viMeet Call
+        StudyHub Call
       </div>
     </div>
   );

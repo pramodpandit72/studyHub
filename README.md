@@ -1,6 +1,6 @@
-# viMeet — Production-Ready MERN Meeting & Learning Platform
+# StudyHub — Production-Ready MERN Meeting & Learning Platform
 
-viMeet is a lightweight, responsive online meeting and virtual classroom platform inspired by the simplicity and practical workflow of educational tools like CodeTantra. It combines session scheduling, WebRTC-powered meetings, attendance tracking, and host moderation with a clean, low-overhead UI.
+StudyHub is a lightweight, responsive online meeting and virtual classroom platform inspired by the simplicity and practical workflow of educational tools like CodeTantra. It combines session scheduling, WebRTC-powered meetings, attendance tracking, and host moderation with a clean, low-overhead UI.
 
 ---
 
@@ -71,7 +71,7 @@ viMeet is a lightweight, responsive online meeting and virtual classroom platfor
 ## Project Structure
 
 ```text
-viMeet/
+StudyHub/
 ├── backend/
 │   ├── src/
 │   │   ├── config/          # db.js, env.js

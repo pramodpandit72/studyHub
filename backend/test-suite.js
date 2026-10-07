@@ -16,10 +16,10 @@ let baseUrl;
 
 const runTests = async () => {
   console.log('====================================================');
-  console.log('    viMeet AUTH (EMAIL OTP SIGNUP) & TEST SUITE     ');
+  console.log('   StudyHub AUTH (EMAIL OTP SIGNUP) & TEST SUITE    ');
   console.log('====================================================');
 
-  await mongoose.connect(env.MONGO_URI, { dbName: 'vimeet' });
+  await mongoose.connect(env.MONGO_URI, { dbName: 'studyhub' });
   console.log(`[DB] Connected to MongoDB database: ${mongoose.connection.name}`);
 
   try {

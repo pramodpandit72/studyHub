@@ -4,7 +4,13 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    preserveSymlinks: true,
+  },
   server: {
     port: 5173,
+    fs: {
+      strict: false,
+    },
   },
 });

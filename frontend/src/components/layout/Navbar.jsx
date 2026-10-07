@@ -48,7 +48,7 @@ export const Navbar = () => {
                 <Video size={18} />
               </div>
               <span className="text-xl font-bold tracking-tight text-text-primary">
-                viMeet
+                StudyHub
               </span>
             </Link>
 

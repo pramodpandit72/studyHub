@@ -104,7 +104,7 @@ export const Feedback = () => {
                 Give us Feedback
               </h1>
               <p className="text-xs text-text-secondary mt-0.5">
-                Tell us what you liked or how we can make viMeet simpler for you.
+                Tell us what you liked or how we can make StudyHub simpler for you.
               </p>
             </div>
           </div>

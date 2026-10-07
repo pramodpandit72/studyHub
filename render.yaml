@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: vimeet-backend
+    name: studyhub-backend
     env: node
     plan: free
     rootDir: backend

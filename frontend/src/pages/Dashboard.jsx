@@ -93,7 +93,7 @@ export const Dashboard = () => {
             Welcome back, {user?.name}
           </h1>
           <p className="text-xs sm:text-sm text-text-secondary mt-1">
-            {user?.role} • {user?.institution || 'viMeet Classroom'}
+            {user?.role} • {user?.institution || 'StudyHub Classroom'}
           </p>
         </div>
 

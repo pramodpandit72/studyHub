@@ -148,7 +148,7 @@ export const Profile = () => {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full space-y-6">
       {/* Top Navigation */}
-      <div className="flex items-center justify-between">
+      <div>
         <button
           onClick={() => navigate('/dashboard')}
           className="btn btn-secondary btn-sm flex items-center gap-1.5"
@@ -157,17 +157,6 @@ export const Profile = () => {
           <ArrowLeft size={15} />
           <span>← Back to Dashboard</span>
         </button>
-
-        {!isEditing && (
-          <button
-            onClick={() => setIsEditing(true)}
-            className="btn btn-primary btn-sm flex items-center gap-1.5 shadow-xs"
-            id="edit-profile-btn"
-          >
-            <Edit3 size={15} />
-            <span>Edit Profile</span>
-          </button>
-        )}
       </div>
 
       {/* Header */}
@@ -349,19 +338,10 @@ export const Profile = () => {
           ) : (
             /* EDIT PROFILE FORM MODE */
             <form onSubmit={handleSubmit} className="card p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-border-color pb-3">
+              <div className="border-b border-border-color pb-3">
                 <h2 className="text-sm font-semibold text-text-primary">
                   Edit Profile Details
                 </h2>
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="p-1 rounded text-text-secondary hover:text-text-primary transition"
-                  title="Cancel edit"
-                  aria-label="Cancel edit"
-                >
-                  <X size={18} />
-                </button>
               </div>
 
               {/* Full Name */}

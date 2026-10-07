@@ -10,9 +10,9 @@ export const Footer = () => {
             <div className="w-6 h-6 rounded bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 flex items-center justify-center font-bold">
               <Video size={13} />
             </div>
-            <span className="font-bold text-text-primary text-sm">viMeet</span>
+            <span className="font-bold text-text-primary text-sm">StudyHub</span>
             <span className="text-xs text-text-secondary ml-2">
-              © {new Date().getFullYear()} viMeet. All rights reserved.
+              © {new Date().getFullYear()} StudyHub. All rights reserved.
             </span>
           </div>
 

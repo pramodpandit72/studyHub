@@ -1,7 +1,7 @@
 {
-  "name": "vimeet-backend",
+  "name": "studyhub-backend",
   "version": "1.0.0",
-  "description": "viMeet - Meeting & Learning Platform Backend",
+  "description": "StudyHub - Meeting & Learning Platform Backend",
   "type": "module",
   "main": "src/server.js",
   "scripts": {

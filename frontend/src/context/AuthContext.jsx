@@ -16,7 +16,7 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const loadUser = useCallback(async () => {
-    const token = localStorage.getItem('vimeet_token');
+    const token = localStorage.getItem('studyhub_token') || localStorage.getItem('vimeet_token');
     if (!token) {
       setLoading(false);
       return;
@@ -26,6 +26,7 @@ export const AuthProvider = ({ children }) => {
       setUser(data.data.user);
       setIsAuthenticated(true);
     } catch {
+      localStorage.removeItem('studyhub_token');
       localStorage.removeItem('vimeet_token');
       setUser(null);
       setIsAuthenticated(false);
@@ -40,7 +41,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = useCallback((token, userData) => {
     disconnectSocket();
-    localStorage.setItem('vimeet_token', token);
+    localStorage.setItem('studyhub_token', token);
     setUser(userData);
     setIsAuthenticated(true);
   }, []);
@@ -52,6 +53,7 @@ export const AuthProvider = ({ children }) => {
       // ignore
     }
     disconnectSocket();
+    localStorage.removeItem('studyhub_token');
     localStorage.removeItem('vimeet_token');
     setUser(null);
     setIsAuthenticated(false);

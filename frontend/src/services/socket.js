@@ -6,7 +6,7 @@ let socket = null;
 
 export const getSocket = () => {
   if (!socket) {
-    const token = localStorage.getItem('studyhub_token') || localStorage.getItem('vimeet_token');
+    const token = localStorage.getItem('studyhub_token');
     socket = io(SOCKET_URL, {
       auth: { token },
       transports: ['websocket', 'polling'],

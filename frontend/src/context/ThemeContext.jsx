@@ -10,7 +10,7 @@ export const useTheme = () => {
 
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('studyhub_theme') || localStorage.getItem('vimeet_theme') || 'light';
+    return localStorage.getItem('studyhub_theme') || 'light';
   });
 
   useEffect(() => {

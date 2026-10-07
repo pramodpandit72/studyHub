@@ -16,18 +16,33 @@ const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
-const clientUrlClean = env.CLIENT_URL ? env.CLIENT_URL.replace(/\/+$/, '') : '';
+const clientUrls = env.CLIENT_URL
+  ? env.CLIENT_URL.split(',').map((u) => {
+      let clean = u.trim().replace(/\/+$/, '');
+      if (clean && !clean.startsWith('http://') && !clean.startsWith('https://')) {
+        clean = `https://${clean}`;
+      }
+      return clean;
+    })
+  : [];
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  const cleanOrigin = origin.replace(/\/+$/, '');
+  return (
+    clientUrls.includes(cleanOrigin) ||
+    cleanOrigin === 'https://studyhub.online' ||
+    cleanOrigin === 'https://www.studyhub.online' ||
+    cleanOrigin.endsWith('.studyhub.online') ||
+    cleanOrigin.endsWith('.vercel.app') ||
+    cleanOrigin.includes('localhost') ||
+    cleanOrigin.includes('127.0.0.1')
+  );
+};
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    const cleanOrigin = origin.replace(/\/+$/, '');
-    if (
-      cleanOrigin === clientUrlClean ||
-      cleanOrigin.includes('localhost') ||
-      cleanOrigin.includes('127.0.0.1') ||
-      cleanOrigin.endsWith('.vercel.app')
-    ) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     return callback(null, true);

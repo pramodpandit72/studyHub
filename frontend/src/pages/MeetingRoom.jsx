@@ -38,6 +38,7 @@ export const MeetingRoom = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isPollOpen, setIsPollOpen] = useState(false);
+  const [showPollNotification, setShowPollNotification] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Initial media preference passed from preview screen
@@ -98,6 +99,7 @@ export const MeetingRoom = () => {
     createPoll,
     votePoll,
     endPoll,
+    publishPollResult,
   } = useWebRTC(meetingCode, id, user, {
     onMeetingEnded: () => {
       error('The host has ended this meeting.');
@@ -142,6 +144,16 @@ export const MeetingRoom = () => {
     }
   }, [mediaError, error]);
 
+  // Trigger poll notification for participants when host publishes a poll
+  useEffect(() => {
+    if (activePoll?.isActive && !isHost && !isPollOpen) {
+      setShowPollNotification(true);
+    }
+    if (!activePoll?.isActive) {
+      setShowPollNotification(false);
+    }
+  }, [activePoll, isHost, isPollOpen]);
+
   const handleCopyLink = () => {
     const link = `${window.location.origin}/join/${meetingCode}`;
     navigator.clipboard.writeText(link);
@@ -173,18 +185,16 @@ export const MeetingRoom = () => {
 
   if (loading || !meeting) return <PageLoader />;
 
-  // Filter remote streams to only active participants (no ghost/stale tiles)
-  const activeRemoteEntries = Object.entries(remoteStreams).filter(([socketId]) =>
-    participants.some((p) => p.socketId === socketId)
-  );
+  // Filter remote participants based on actual participant list
+  const remoteParticipants = participants.filter((p) => p.userId !== user?._id);
 
   const isRemoteScreenSharing = Boolean(
-    activeScreenShare && activeScreenShare.socketId && remoteStreams[activeScreenShare.socketId]
+    activeScreenShare && activeScreenShare.socketId && activeScreenShare.userId !== user?._id
   );
   const isSomeoneScreenSharing = isScreenSharing || isRemoteScreenSharing;
 
   // Calculate dynamic grid columns for normal mode
-  const totalTiles = 1 + activeRemoteEntries.length;
+  const totalTiles = 1 + remoteParticipants.length;
   const gridClass =
     totalTiles === 1
       ? 'grid-cols-1'
@@ -192,7 +202,9 @@ export const MeetingRoom = () => {
       ? 'grid-cols-1 md:grid-cols-2'
       : totalTiles <= 4
       ? 'grid-cols-1 sm:grid-cols-2'
-      : 'grid-cols-2 lg:grid-cols-3';
+      : totalTiles <= 6
+      ? 'grid-cols-2 lg:grid-cols-3'
+      : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
 
   return (
     <div className="flex flex-col h-screen bg-surface-50 dark:bg-surface-950 text-text-primary transition-colors overflow-hidden">
@@ -247,6 +259,35 @@ export const MeetingRoom = () => {
 
       {/* Main Call Area */}
       <div className="flex-1 flex overflow-hidden relative">
+        {/* Floating Real-Time Poll Notification Banner */}
+        {showPollNotification && activePoll?.isActive && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-surface-50 dark:bg-surface-800 border border-border-color shadow-xl rounded-xl px-4 py-2.5 flex items-center gap-3 animate-in fade-in slide-in-from-top duration-200">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              <span className="text-xs font-semibold text-text-primary">New Poll:</span>
+              <span className="text-xs text-text-secondary truncate max-w-xs">{activePoll.question}</span>
+            </div>
+            <button
+              onClick={() => {
+                setIsPollOpen(true);
+                setShowPollNotification(false);
+                if (isChatOpen) setIsChatOpen(false);
+                if (isParticipantsOpen) setIsParticipantsOpen(false);
+              }}
+              className="btn btn-primary btn-sm text-xs py-1 px-3"
+            >
+              Participate
+            </button>
+            <button
+              onClick={() => setShowPollNotification(false)}
+              className="p-1 rounded text-text-tertiary hover:text-text-primary transition"
+              aria-label="Dismiss notification"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         {/* Unmute Request Modal */}
         {unmuteRequest && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
@@ -377,24 +418,21 @@ export const MeetingRoom = () => {
                 </div>
 
                 {/* Remote Participant Tiles (exclude active presenter to prevent duplicate tile and audio echo) */}
-                {activeRemoteEntries
-                  .filter(([socketId]) => !activeScreenShare || activeScreenShare.socketId !== socketId)
-                  .map(([socketId, stream]) => {
-                    const participant = participants.find((p) => p.socketId === socketId);
-                    return (
-                      <div key={socketId} className="w-48 lg:w-full h-32 shrink-0">
-                        <VideoTile
-                          stream={stream}
-                          name={participant?.name || 'Participant'}
-                          role={participant?.role || 'participant'}
-                          isAudioEnabled={participant?.audio || false}
-                          isVideoEnabled={participant?.video || false}
-                          isLocal={false}
-                          isHost={participant?.isHost || participant?.role === 'host' || participant?.role === 'Teacher'}
-                        />
-                      </div>
-                    );
-                  })}
+                {remoteParticipants
+                  .filter((p) => !activeScreenShare || activeScreenShare.socketId !== p.socketId)
+                  .map((participant) => (
+                    <div key={participant.socketId} className="w-48 lg:w-full h-32 shrink-0">
+                      <VideoTile
+                        stream={remoteStreams[participant.socketId] || null}
+                        name={participant.name || 'Participant'}
+                        role={participant.role || 'participant'}
+                        isAudioEnabled={participant.audio || false}
+                        isVideoEnabled={participant.video || false}
+                        isLocal={false}
+                        isHost={participant.isHost || participant.role === 'host' || participant.role === 'Teacher'}
+                      />
+                    </div>
+                  ))}
               </div>
             </div>
           ) : (
@@ -412,21 +450,18 @@ export const MeetingRoom = () => {
               />
 
               {/* Remote Video Tiles */}
-              {activeRemoteEntries.map(([socketId, stream]) => {
-                const participant = participants.find((p) => p.socketId === socketId);
-                return (
-                  <VideoTile
-                    key={socketId}
-                    stream={stream}
-                    name={participant?.name || 'Participant'}
-                    role={participant?.role || 'participant'}
-                    isAudioEnabled={participant?.audio || false}
-                    isVideoEnabled={participant?.video || false}
-                    isLocal={false}
-                    isHost={participant?.isHost || participant?.role === 'host' || participant?.role === 'Teacher'}
-                  />
-                );
-              })}
+              {remoteParticipants.map((participant) => (
+                <VideoTile
+                  key={participant.socketId}
+                  stream={remoteStreams[participant.socketId] || null}
+                  name={participant.name || 'Participant'}
+                  role={participant.role || 'participant'}
+                  isAudioEnabled={participant.audio || false}
+                  isVideoEnabled={participant.video || false}
+                  isLocal={false}
+                  isHost={participant.isHost || participant.role === 'host' || participant.role === 'Teacher'}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -475,6 +510,7 @@ export const MeetingRoom = () => {
           onCreatePoll={createPoll}
           onVotePoll={votePoll}
           onEndPoll={endPoll}
+          onPublishResult={publishPollResult}
           currentUserId={user?._id}
         />
       </div>

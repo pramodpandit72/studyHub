@@ -151,31 +151,38 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
     // Remote Track received - merge all active tracks cleanly
     peer.ontrack = (event) => {
-      setRemoteStreams((prev) => {
-        const existing = prev[remoteSocketId] || new MediaStream();
-        const incomingTracks = event.streams && event.streams[0] ? event.streams[0].getTracks() : [event.track];
+      const updateStream = () => {
+        setRemoteStreams((prev) => {
+          const existing = prev[remoteSocketId] || new MediaStream();
+          const incomingTracks = event.streams && event.streams[0] ? event.streams[0].getTracks() : [event.track];
 
-        incomingTracks.forEach((track) => {
-          if (!track) return;
-          // Remove any obsolete or ended tracks of the same kind so HTML5 video plays current track
-          existing.getTracks().forEach((oldTrack) => {
-            if (oldTrack.kind === track.kind && (oldTrack.id !== track.id || oldTrack.readyState === 'ended')) {
-              existing.removeTrack(oldTrack);
+          incomingTracks.forEach((track) => {
+            if (!track) return;
+            // Remove any obsolete or ended tracks of the same kind so HTML5 video plays current track
+            existing.getTracks().forEach((oldTrack) => {
+              if (oldTrack.kind === track.kind && (oldTrack.id !== track.id || oldTrack.readyState === 'ended')) {
+                existing.removeTrack(oldTrack);
+              }
+            });
+            if (!existing.getTracks().some((t) => t.id === track.id)) {
+              existing.addTrack(track);
             }
           });
-          if (!existing.getTracks().some((t) => t.id === track.id)) {
-            existing.addTrack(track);
-          }
+
+          return {
+            ...prev,
+            [remoteSocketId]: new MediaStream(existing.getTracks()),
+          };
         });
+      };
 
-        return {
-          ...prev,
-          [remoteSocketId]: new MediaStream(existing.getTracks()),
-        };
-      });
+      updateStream();
+
+      if (event.track) {
+        event.track.onunmute = updateStream;
+        event.track.onended = updateStream;
+      }
     };
-
-
 
     peer.onconnectionstatechange = () => {
       if (peer.connectionState === 'failed') {
@@ -440,6 +447,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     socket.on('poll-published', (poll) => setActivePoll(poll));
     socket.on('poll-updated', (poll) => setActivePoll(poll));
     socket.on('poll-closed', (poll) => setActivePoll(poll));
+    socket.on('poll-result-published', (poll) => setActivePoll(poll));
 
     // Meeting lifecycle
     socket.on('meeting-ended', () => {
@@ -487,6 +495,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         socketRef.current.off('poll-published');
         socketRef.current.off('poll-updated');
         socketRef.current.off('poll-closed');
+        socketRef.current.off('poll-result-published');
         socketRef.current.off('meeting-ended');
         socketRef.current.off('removed-from-meeting');
         socketRef.current.off('error-message');
@@ -756,6 +765,10 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     socketRef.current?.emit('end-poll', { roomId, pollId });
   }, [roomId]);
 
+  const publishPollResult = useCallback((pollId) => {
+    socketRef.current?.emit('publish-poll-result', { roomId, pollId });
+  }, [roomId]);
+
   return {
     localStream,
     screenStream,
@@ -790,6 +803,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     createPoll,
     votePoll,
     endPoll,
+    publishPollResult,
   };
 };
 

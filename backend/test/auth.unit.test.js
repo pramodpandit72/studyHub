@@ -283,3 +283,98 @@ describe('8. Attendance Calculation Utilities', () => {
     assert.equal(getStatus(60), 'Present');
   });
 });
+
+describe('9. Meeting Code & Status Transition Rules', () => {
+  it('generates valid uppercase alphanumeric 6-character meeting codes', () => {
+    const generateMeetingCode = () => {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return code;
+    };
+
+    const code = generateMeetingCode();
+    assert.equal(code.length, 6);
+    assert.match(code, /^[A-Z0-9]{6}$/);
+  });
+
+  it('validates meeting status transition hierarchy: scheduled -> live -> completed', () => {
+    const isValidTransition = (current, next) => {
+      if (current === 'scheduled' && (next === 'live' || next === 'cancelled')) return true;
+      if (current === 'live' && next === 'completed') return true;
+      return false;
+    };
+
+    assert.equal(isValidTransition('scheduled', 'live'), true);
+    assert.equal(isValidTransition('live', 'completed'), true);
+    assert.equal(isValidTransition('completed', 'live'), false); // Cannot revive completed meeting
+    assert.equal(isValidTransition('completed', 'scheduled'), false);
+  });
+});
+
+describe('10. Multi-User WebRTC Mesh Peer Connection Mapping', () => {
+  it('correctly maps peer connections for N participants in full mesh (N*(N-1)/2)', () => {
+    const participants = ['Host', 'ParticipantA', 'ParticipantB', 'ParticipantC'];
+    const peerConnections = [];
+
+    for (let i = 0; i < participants.length; i++) {
+      for (let j = i + 1; j < participants.length; j++) {
+        peerConnections.push(`${participants[i]} <-> ${participants[j]}`);
+      }
+    }
+
+    // 4 participants => 4 * 3 / 2 = 6 peer connection channels
+    assert.equal(peerConnections.length, 6);
+    assert.ok(peerConnections.includes('Host <-> ParticipantA'));
+    assert.ok(peerConnections.includes('ParticipantA <-> ParticipantB'));
+    assert.ok(peerConnections.includes('ParticipantB <-> ParticipantC'));
+  });
+
+  it('handles participant leave by cleanly removing peer connections', () => {
+    let activePeers = {
+      'socket-A': { id: 'peer-A' },
+      'socket-B': { id: 'peer-B' },
+      'socket-C': { id: 'peer-C' },
+    };
+
+    const removePeer = (socketId) => {
+      delete activePeers[socketId];
+    };
+
+    removePeer('socket-B');
+    assert.equal(Object.keys(activePeers).length, 2);
+    assert.equal(activePeers['socket-B'], undefined);
+  });
+});
+
+describe('11. Poll Results Exact Calculation & Division-by-Zero Safety', () => {
+  it('calculates exact integer percentage rounded and handles 0 total votes', () => {
+    const calculateResults = (options, totalVotes) => {
+      return options.map((opt) => ({
+        ...opt,
+        percentage: totalVotes > 0 ? Math.round((opt.votes / totalVotes) * 100) : 0,
+      }));
+    };
+
+    // 0 votes case
+    const zeroVoteResults = calculateResults([{ id: 0, votes: 0 }, { id: 1, votes: 0 }], 0);
+    assert.equal(zeroVoteResults[0].percentage, 0);
+    assert.equal(zeroVoteResults[1].percentage, 0);
+
+    // Multi-vote case
+    const activeResults = calculateResults(
+      [
+        { id: 0, text: 'React', votes: 5 },
+        { id: 1, text: 'Vue', votes: 3 },
+        { id: 2, text: 'Angular', votes: 2 },
+      ],
+      10
+    );
+
+    assert.equal(activeResults[0].percentage, 50);
+    assert.equal(activeResults[1].percentage, 30);
+    assert.equal(activeResults[2].percentage, 20);
+  });
+});

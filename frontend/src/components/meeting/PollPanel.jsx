@@ -9,6 +9,7 @@ export const PollPanel = ({
   onCreatePoll,
   onVotePoll,
   onEndPoll,
+  onPublishResult,
   currentUserId,
 }) => {
   const [question, setQuestion] = useState('');
@@ -307,12 +308,27 @@ export const PollPanel = ({
                         End Poll
                       </button>
                     ) : (
-                      <button
-                        onClick={() => setShowCreateForm(true)}
-                        className="btn btn-primary btn-sm w-full justify-center"
-                      >
-                        Create Another Poll
-                      </button>
+                      <>
+                        {!activePoll.isResultPublished ? (
+                          <button
+                            onClick={() => onPublishResult?.(activePoll.id)}
+                            className="btn btn-primary btn-sm w-full justify-center flex items-center gap-1.5"
+                          >
+                            <BarChart2 size={14} />
+                            <span>Publish Result to Everyone</span>
+                          </button>
+                        ) : (
+                          <div className="p-2 rounded-md bg-surface-200 dark:bg-surface-800 text-[11px] font-medium text-center text-text-secondary border border-border-color">
+                            ✓ Final Results Published to All Participants
+                          </div>
+                        )}
+                        <button
+                          onClick={() => setShowCreateForm(true)}
+                          className="btn btn-secondary btn-sm w-full justify-center"
+                        >
+                          Create Another Poll
+                        </button>
+                      </>
                     )}
                   </div>
                 )}

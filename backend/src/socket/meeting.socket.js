@@ -348,6 +348,7 @@ export const setupMeetingSocket = (io) => {
         voters: {},
         totalVotes: 0,
         isActive: true,
+        isResultPublished: false,
         createdAt: new Date().toISOString(),
       };
 
@@ -378,6 +379,18 @@ export const setupMeetingSocket = (io) => {
 
       poll.isActive = false;
       io.to(roomId).emit('poll-closed', poll);
+    });
+
+    socket.on('publish-poll-result', ({ roomId, pollId }) => {
+      if (!verifyHost(roomId)) {
+        socket.emit('error-message', { message: 'Host permission required to publish poll results.' });
+        return;
+      }
+      const poll = activePolls.get(roomId);
+      if (!poll || poll.id !== pollId) return;
+
+      poll.isResultPublished = true;
+      io.to(roomId).emit('poll-result-published', poll);
     });
 
     // Host End Meeting

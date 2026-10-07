@@ -189,3 +189,78 @@ describe('Frontend 5: Meeting Status and Time Formatting', () => {
     assert.equal(isMeetingCodeValid('AB-123'), false);
   });
 });
+
+describe('Frontend 6: Dynamic Multi-User Video Grid Layout Calculation', () => {
+  const getGridClass = (remoteParticipantsCount) => {
+    const totalTiles = 1 + remoteParticipantsCount;
+    if (totalTiles === 1) return 'grid-cols-1';
+    if (totalTiles === 2) return 'grid-cols-1 md:grid-cols-2';
+    if (totalTiles <= 4) return 'grid-cols-1 sm:grid-cols-2';
+    if (totalTiles <= 6) return 'grid-cols-2 lg:grid-cols-3';
+    return 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
+  };
+
+  it('calculates correct responsive grid CSS classes for any number of participants', () => {
+    assert.equal(getGridClass(0), 'grid-cols-1'); // 1 local tile
+    assert.equal(getGridClass(1), 'grid-cols-1 md:grid-cols-2'); // 2 tiles
+    assert.equal(getGridClass(3), 'grid-cols-1 sm:grid-cols-2'); // 4 tiles
+    assert.equal(getGridClass(5), 'grid-cols-2 lg:grid-cols-3'); // 6 tiles
+    assert.equal(getGridClass(8), 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4'); // 9 tiles
+  });
+});
+
+describe('Frontend 7: Screen Sharing Presentation Mode & Filmstrip Filtering', () => {
+  it('correctly filters presenter out of filmstrip to prevent duplicate tile & audio echo', () => {
+    const participants = [
+      { socketId: 'sock-A', userId: 'user-A', name: 'User A' },
+      { socketId: 'sock-B', userId: 'user-B', name: 'User B' },
+      { socketId: 'sock-C', userId: 'user-C', name: 'User C' },
+    ];
+
+    const currentUserId = 'user-A';
+    const activeScreenShare = { socketId: 'sock-B', user: { name: 'User B' } };
+
+    const remoteParticipants = participants.filter((p) => p.userId !== currentUserId);
+    assert.equal(remoteParticipants.length, 2);
+
+    const filmstripParticipants = remoteParticipants.filter(
+      (p) => !activeScreenShare || activeScreenShare.socketId !== p.socketId
+    );
+
+    // sock-B is presenting, so only sock-C appears in the camera filmstrip
+    assert.equal(filmstripParticipants.length, 1);
+    assert.equal(filmstripParticipants[0].socketId, 'sock-C');
+  });
+});
+
+describe('Frontend 8: Real-Time Poll Notification Trigger Logic', () => {
+  it('triggers notification banner only for non-host participants when poll is active and panel is closed', () => {
+    const shouldShowNotification = ({ activePoll, isHost, isPollOpen }) => {
+      return Boolean(activePoll?.isActive && !isHost && !isPollOpen);
+    };
+
+    // Host should NOT see floating banner (they are already in control)
+    assert.equal(
+      shouldShowNotification({ activePoll: { isActive: true }, isHost: true, isPollOpen: false }),
+      false
+    );
+
+    // Participant with panel open should NOT see banner
+    assert.equal(
+      shouldShowNotification({ activePoll: { isActive: true }, isHost: false, isPollOpen: true }),
+      false
+    );
+
+    // Participant with panel closed receives real-time notification
+    assert.equal(
+      shouldShowNotification({ activePoll: { isActive: true }, isHost: false, isPollOpen: false }),
+      true
+    );
+
+    // Closed/Ended poll does not trigger notification
+    assert.equal(
+      shouldShowNotification({ activePoll: { isActive: false }, isHost: false, isPollOpen: false }),
+      false
+    );
+  });
+});

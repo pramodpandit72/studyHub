@@ -38,7 +38,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!robots\\.txt|sitemap\\.xml|site\\.webmanifest|favicon\\..*|apple-touch-icon\\.png|studyhub-og\\..*).*)$",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]

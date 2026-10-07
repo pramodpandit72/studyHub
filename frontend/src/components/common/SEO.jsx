@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 const DEFAULT_TITLE = 'StudyHub — Online Meetings, Classes & Study Sessions';
 const DEFAULT_DESCRIPTION =
   'StudyHub delivers clear video meetings, interactive virtual classes, automated attendance, chat, and host controls for students, teachers, and teams.';
-const SITE_URL = 'https://studyhub.online';
+const SITE_URL = 'https://www.studyhub.online';
 const DEFAULT_IMAGE = `${SITE_URL}/studyhub-og.png`;
 
 /**

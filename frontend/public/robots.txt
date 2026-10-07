@@ -27,4 +27,4 @@ Disallow: /join/
 Disallow: /api/
 
 # Sitemap location
-Sitemap: https://studyhub.online/sitemap.xml
+Sitemap: https://www.studyhub.online/sitemap.xml

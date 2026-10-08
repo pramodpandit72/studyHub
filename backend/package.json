@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node --test test/auth.unit.test.js",
+    "test": "node --test test/*.unit.test.js",
     "test:integration": "node test-suite.js"
   },
   "dependencies": {
@@ -27,3 +27,4 @@
     "nodemon": "^3.1.4"
   }
 }
+

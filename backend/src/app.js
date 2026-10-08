@@ -11,6 +11,7 @@ import userRoutes from './routes/user.routes.js';
 import meetingRoutes from './routes/meeting.routes.js';
 import attendanceRoutes from './routes/attendance.routes.js';
 import feedbackRoutes from './routes/feedback.routes.js';
+import mockTestRoutes from './routes/mockTest.routes.js';
 
 const app = express();
 
@@ -84,9 +85,11 @@ app.use('/api/users', userRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/mock-tests', mockTestRoutes);
 
 
 app.use(notFound);
 app.use(errorHandler);
 
 export default app;
+

@@ -140,7 +140,7 @@ export const Login = () => {
                 <input
                   id="email"
                   type="email"
-                  placeholder="name@example.com"
+                  placeholder="Enter email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="input-field pl-10 text-sm"

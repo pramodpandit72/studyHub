@@ -93,6 +93,23 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     }
   }, []);
 
+  // Refresh remote streams from peer receivers directly (handles track additions/swaps without duplicate ontrack)
+  const refreshRemoteStream = useCallback((remoteSocketId) => {
+    const peer = peersRef.current[remoteSocketId];
+    if (!peer) return;
+    const receivers = peer.getReceivers ? peer.getReceivers() : [];
+    const tracks = receivers
+      .map((r) => r.track)
+      .filter((track) => track && track.readyState !== 'ended');
+
+    if (tracks.length > 0) {
+      setRemoteStreams((prev) => ({
+        ...prev,
+        [remoteSocketId]: new MediaStream(tracks),
+      }));
+    }
+  }, []);
+
   // Close and clean up a single peer connection
   const closePeer = useCallback((remoteSocketId) => {
     if (peersRef.current[remoteSocketId]) {
@@ -172,7 +189,6 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
           incomingTracks.forEach((track) => {
             if (!track) return;
-            // Remove any obsolete or ended tracks of the same kind so HTML5 video plays current track
             existing.getTracks().forEach((oldTrack) => {
               if (oldTrack.kind === track.kind && (oldTrack.id !== track.id || oldTrack.readyState === 'ended')) {
                 existing.removeTrack(oldTrack);
@@ -191,10 +207,17 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       };
 
       updateStream();
+      refreshRemoteStream(remoteSocketId);
 
       if (event.track) {
-        event.track.onunmute = updateStream;
-        event.track.onended = updateStream;
+        event.track.onunmute = () => {
+          updateStream();
+          refreshRemoteStream(remoteSocketId);
+        };
+        event.track.onended = () => {
+          updateStream();
+          refreshRemoteStream(remoteSocketId);
+        };
       }
     };
 
@@ -348,6 +371,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
         socket.emit('answer', { to: from, answer });
+        refreshRemoteStream(from);
       } catch (err) {
         console.error('Failed to handle offer:', err);
       }
@@ -360,6 +384,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         try {
           await peer.setRemoteDescription(new RTCSessionDescription(answer));
           await flushQueuedIceCandidates(from, peer);
+          refreshRemoteStream(from);
         } catch (err) {
           console.error('Failed to set remote answer:', err);
         }
@@ -389,12 +414,14 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       setParticipants((prev) =>
         prev.map((p) => (p.socketId === socketId ? { ...p, audio: enabled } : p))
       );
+      refreshRemoteStream(socketId);
     });
 
     socket.on('participant-video-toggle', ({ socketId, enabled }) => {
       setParticipants((prev) =>
         prev.map((p) => (p.socketId === socketId ? { ...p, video: enabled } : p))
       );
+      refreshRemoteStream(socketId);
     });
 
     // Participant Left
@@ -593,15 +620,27 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
         setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
 
-        // Replace or add track to peers
-        Object.values(peersRef.current).forEach((peer) => {
-          const audioSender = getAudioSender(peer);
-          if (audioSender) {
-            audioSender.replaceTrack(newTrack);
-          } else {
-            peer.addTrack(newTrack, localStreamRef.current);
+        // Replace audio sender on all peers & renegotiate
+        for (const [remoteSocketId, peer] of Object.entries(peersRef.current)) {
+          try {
+            const transceivers = peer.getTransceivers ? peer.getTransceivers() : [];
+            const at = transceivers.find(
+              (t) => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio'
+            );
+            if (at) {
+              at.direction = 'sendrecv';
+            }
+            const audioSender = getAudioSender(peer);
+            if (audioSender) {
+              await audioSender.replaceTrack(newTrack);
+            } else {
+              peer.addTrack(newTrack, localStreamRef.current);
+            }
+            await renegotiatePeer(remoteSocketId, peer);
+          } catch (e) {
+            console.warn('Error updating audio track on peer:', remoteSocketId, e);
           }
-        });
+        }
 
 
         setIsAudioEnabled(true);
@@ -617,7 +656,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       console.warn('Microphone toggle failed:', err);
       setMediaError('Microphone permission denied or unavailable');
     }
-  }, [roomId]);
+  }, [roomId, renegotiatePeer]);
 
   // Toggle Camera (Hardware release on turn-off, fresh acquire on turn-on)
   const toggleVideo = useCallback(async () => {

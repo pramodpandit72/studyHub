@@ -133,6 +133,9 @@ export const Dashboard = () => {
             <p className="text-xs text-text-secondary mt-1 leading-relaxed">
               Start a live meeting right now and share the code with others.
             </p>
+            <p className="text-xs text-text-secondary/80 mt-1 leading-relaxed">
+              Instant one-click HD video rooms with live chat, audio, and screen sharing.
+            </p>
           </div>
         </Link>
 
@@ -151,6 +154,9 @@ export const Dashboard = () => {
             <p className="text-xs text-text-secondary mt-1 leading-relaxed">
               Plan upcoming classes, tutoring, or webinars in advance.
             </p>
+            <p className="text-xs text-text-secondary/80 mt-1 leading-relaxed">
+              Set custom dates, recurring lecture sessions, and automated reminder alerts.
+            </p>
           </div>
         </Link>
 
@@ -168,6 +174,9 @@ export const Dashboard = () => {
             </h2>
             <p className="text-xs text-text-secondary mt-1 leading-relaxed">
               Check attendance, join times, and duration for your meetings.
+            </p>
+            <p className="text-xs text-text-secondary/80 mt-1 leading-relaxed">
+              Export downloadable attendance reports and track student engagement stats.
             </p>
           </div>
         </Link>

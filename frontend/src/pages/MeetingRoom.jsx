@@ -188,8 +188,12 @@ export const MeetingRoom = () => {
   // Filter remote participants based on actual participant list
   const remoteParticipants = participants.filter((p) => p.userId !== user?._id);
 
+  const activeSharerId = activeScreenShare?.userId || activeScreenShare?.user?._id;
   const isRemoteScreenSharing = Boolean(
-    activeScreenShare && activeScreenShare.socketId && activeScreenShare.userId !== user?._id
+    activeScreenShare &&
+      activeScreenShare.socketId &&
+      !isScreenSharing &&
+      (activeSharerId ? activeSharerId.toString() !== user?._id?.toString() : true)
   );
   const isSomeoneScreenSharing = isScreenSharing || isRemoteScreenSharing;
 
@@ -366,7 +370,7 @@ export const MeetingRoom = () => {
                   <div className="relative w-full h-full flex items-center justify-center">
                     <VideoTile
                       stream={remoteStreams[activeScreenShare.socketId]}
-                      name={`${activeScreenShare.user?.name || 'Participant'}'s Screen`}
+                      name={`${activeScreenShare.user?.name || activeScreenShare.name || 'Participant'}'s Screen`}
                       role="presenter"
                       isAudioEnabled={
                         participants.find((p) => p.socketId === activeScreenShare.socketId)?.audio || false
@@ -381,7 +385,7 @@ export const MeetingRoom = () => {
                     <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
                       <span className="px-2.5 py-1 bg-neutral-900/90 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 border border-neutral-700 backdrop-blur-xs">
                         <Radio size={12} className="animate-pulse" />
-                        {activeScreenShare.user?.name}'s Screen
+                        {activeScreenShare.user?.name || activeScreenShare.name || 'Participant'}'s Screen
                       </span>
                     </div>
 

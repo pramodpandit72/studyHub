@@ -175,12 +175,19 @@ export const setupMeetingSocket = (io) => {
         userId: socket.user._id.toString(),
         name: socket.user.name,
         isHost: participant.isHost,
+        user: {
+          _id: socket.user._id.toString(),
+          name: socket.user.name,
+          role: socket.user.role,
+        },
       };
 
       io.to(roomId).emit('screen-share-started', {
         socketId: socket.id,
+        userId: socket.user._id.toString(),
+        name: socket.user.name,
         user: {
-          _id: socket.user._id,
+          _id: socket.user._id.toString(),
           name: socket.user.name,
           role: socket.user.role,
         },

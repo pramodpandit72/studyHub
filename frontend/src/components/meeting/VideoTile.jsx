@@ -17,12 +17,19 @@ export const VideoTile = ({
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
-      videoRef.current.play?.().catch((err) => {
-        // Autoplay may require interaction or is already active
-        console.debug('Video play catch:', err.message);
-      });
+      const playPromise = videoRef.current.play?.();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.debug('Video play catch:', err.message);
+          // If browser autoplay policy blocks unmuted video for presenter, mute and retry play so video displays
+          if (role === 'presenter' && !videoRef.current.muted) {
+            videoRef.current.muted = true;
+            videoRef.current.play?.().catch(() => {});
+          }
+        });
+      }
     }
-  }, [stream]);
+  }, [stream, role]);
 
   // Active speaker detection via Web Audio API
   useEffect(() => {

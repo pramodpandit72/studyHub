@@ -30,6 +30,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
   const cameraTrackRef = useRef(null);
   const audioTrackRef = useRef(null);
   const screenTrackRef = useRef(null);
+  const screenStreamRef = useRef(null);
   const peersRef = useRef({});
   const iceCandidatesQueueRef = useRef({}); // { socketId: RTCIceCandidateInit[] }
   const isScreenSharingRef = useRef(false);
@@ -42,6 +43,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
   isScreenSharingRef.current = isScreenSharing;
   isVideoEnabledRef.current = isVideoEnabled;
   isAudioEnabledRef.current = isAudioEnabled;
+  screenStreamRef.current = screenStream;
 
   // Reliable Sender finders using Transceivers (handles null track states)
   const getVideoSender = (peer) => {
@@ -76,6 +78,18 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
           console.warn('Error adding queued ICE candidate:', err);
         }
       }
+    }
+  }, []);
+
+  // Renegotiate with peer to associate updated tracks
+  const renegotiatePeer = useCallback(async (remoteSocketId, peer) => {
+    try {
+      if (!peer || peer.signalingState !== 'stable') return;
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      socketRef.current?.emit('offer', { to: remoteSocketId, offer });
+    } catch (err) {
+      console.warn('Renegotiate offer error with', remoteSocketId, err);
     }
   }, []);
 
@@ -132,7 +146,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
     if (activeVideoTrack) {
       const videoStreamToSend = isScreenSharingRef.current && screenTrackRef.current
-        ? (screenStream || new MediaStream([activeVideoTrack]))
+        ? (screenStreamRef.current || new MediaStream([activeVideoTrack]))
         : (localStreamRef.current || new MediaStream([activeVideoTrack]));
       peer.addTrack(activeVideoTrack, videoStreamToSend);
     } else {
@@ -400,7 +414,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     });
 
     // Force Stop Screen Share (e.g. host revoked permission)
-    socket.on('force-stop-screen-share', () => {
+    socket.on('force-stop-screen-share', async () => {
       if (isScreenSharingRef.current) {
         if (screenTrackRef.current) {
           screenTrackRef.current.stop();
@@ -411,16 +425,33 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
         // Restore camera track to peers if camera was active
         const restoreTrack = isVideoEnabledRef.current && cameraTrackRef.current ? cameraTrackRef.current : null;
-        Object.values(peersRef.current).forEach((peer) => {
-          const videoSender = getVideoSender(peer);
-          if (videoSender) {
-            videoSender.replaceTrack(restoreTrack);
+        for (const [remoteSocketId, peer] of Object.entries(peersRef.current)) {
+          try {
+            const videoSender = getVideoSender(peer);
+            if (videoSender) {
+              await videoSender.replaceTrack(restoreTrack);
+            }
+            await renegotiatePeer(remoteSocketId, peer);
+          } catch (e) {
+            console.warn('Error restoring camera on force stop:', remoteSocketId, e);
           }
-        });
+        }
 
         socketRef.current?.emit('screen-share-stopped', { roomId });
         callbacksRef.current?.onScreenShareRevoked?.();
       }
+    });
+
+    // Screen Share Denied by host/room permissions
+    socket.on('screen-share-denied', ({ message }) => {
+      if (screenTrackRef.current) {
+        screenTrackRef.current.stop();
+        screenTrackRef.current = null;
+      }
+      setScreenStream(null);
+      setIsScreenSharing(false);
+      setMediaError(message || 'Screen sharing is not permitted by host.');
+      callbacksRef.current?.onScreenShareDenied?.(message);
     });
 
     // Force Mute by Host
@@ -488,6 +519,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         socketRef.current.off('screen-share-started');
         socketRef.current.off('screen-share-stopped');
         socketRef.current.off('force-stop-screen-share');
+        socketRef.current.off('screen-share-denied');
         socketRef.current.off('force-mute');
         socketRef.current.off('unmute-requested');
         socketRef.current.off('new-message');
@@ -571,12 +603,17 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
         // If not screen sharing, replace video track with null on all peers
         if (!isScreenSharingRef.current) {
-          Object.values(peersRef.current).forEach((peer) => {
-            const videoSender = getVideoSender(peer);
-            if (videoSender) {
-              videoSender.replaceTrack(null);
+          for (const [remoteSocketId, peer] of Object.entries(peersRef.current)) {
+            try {
+              const videoSender = getVideoSender(peer);
+              if (videoSender) {
+                await videoSender.replaceTrack(null);
+              }
+              await renegotiatePeer(remoteSocketId, peer);
+            } catch (e) {
+              console.warn('Error clearing video track on peer:', remoteSocketId, e);
             }
-          });
+          }
         }
 
         socketRef.current?.emit('toggle-video', { roomId, enabled: false });
@@ -603,14 +640,19 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
       // If not actively screen sharing, send fresh camera track to all peers
       if (!isScreenSharingRef.current) {
-        Object.values(peersRef.current).forEach((peer) => {
-          const videoSender = getVideoSender(peer);
-          if (videoSender) {
-            videoSender.replaceTrack(newTrack);
-          } else {
-            peer.addTrack(newTrack, localStreamRef.current);
+        for (const [remoteSocketId, peer] of Object.entries(peersRef.current)) {
+          try {
+            const videoSender = getVideoSender(peer);
+            if (videoSender) {
+              await videoSender.replaceTrack(newTrack);
+            } else {
+              peer.addTrack(newTrack, localStreamRef.current);
+            }
+            await renegotiatePeer(remoteSocketId, peer);
+          } catch (e) {
+            console.warn('Error updating video track on peer:', remoteSocketId, e);
           }
-        });
+        }
       }
 
       setIsVideoEnabled(true);
@@ -619,10 +661,10 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       console.warn('Camera toggle failed:', err);
       setMediaError('Camera permission denied or unavailable');
     }
-  }, [roomId, isVideoEnabled]);
+  }, [roomId, isVideoEnabled, renegotiatePeer]);
 
   // Stop Screen Share
-  const stopScreenShare = useCallback(() => {
+  const stopScreenShare = useCallback(async () => {
     if (screenTrackRef.current) {
       screenTrackRef.current.stop();
       screenTrackRef.current = null;
@@ -630,17 +672,22 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     setScreenStream(null);
     setIsScreenSharing(false);
 
-    // Restore camera track to peers if camera is enabled
+    // Restore camera track to peers if camera is enabled and renegotiate
     const restoreTrack = isVideoEnabledRef.current && cameraTrackRef.current ? cameraTrackRef.current : null;
-    Object.values(peersRef.current).forEach((peer) => {
-      const videoSender = getVideoSender(peer);
-      if (videoSender) {
-        videoSender.replaceTrack(restoreTrack);
+    for (const [remoteSocketId, peer] of Object.entries(peersRef.current)) {
+      try {
+        const videoSender = getVideoSender(peer);
+        if (videoSender) {
+          await videoSender.replaceTrack(restoreTrack);
+        }
+        await renegotiatePeer(remoteSocketId, peer);
+      } catch (e) {
+        console.warn('Error restoring camera track to peer:', remoteSocketId, e);
       }
-    });
+    }
 
     socketRef.current?.emit('screen-share-stopped', { roomId });
-  }, [roomId]);
+  }, [roomId, renegotiatePeer]);
 
   // Start Screen Share
   const startScreenShare = useCallback(async () => {
@@ -661,15 +708,20 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         stopScreenShare();
       };
 
-      // Replace video sender on all peers with the screen track
-      Object.values(peersRef.current).forEach((peer) => {
-        const videoSender = getVideoSender(peer);
-        if (videoSender) {
-          videoSender.replaceTrack(screenTrack);
-        } else {
-          peer.addTrack(screenTrack, displayStream);
+      // Replace video sender on all peers with the screen track & renegotiate
+      for (const [remoteSocketId, peer] of Object.entries(peersRef.current)) {
+        try {
+          const videoSender = getVideoSender(peer);
+          if (videoSender) {
+            await videoSender.replaceTrack(screenTrack);
+          } else {
+            peer.addTrack(screenTrack, displayStream);
+          }
+          await renegotiatePeer(remoteSocketId, peer);
+        } catch (e) {
+          console.warn('Error sending screen share track to peer:', remoteSocketId, e);
         }
-      });
+      }
 
       setIsScreenSharing(true);
       socketRef.current?.emit('screen-share-started', { roomId });
@@ -681,7 +733,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       }
       setMediaError('Screen sharing failed or canceled');
     }
-  }, [roomId, stopScreenShare]);
+  }, [roomId, stopScreenShare, renegotiatePeer]);
 
 
   // Toggle Screen Share

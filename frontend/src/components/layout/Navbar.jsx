@@ -13,6 +13,7 @@ import {
   ClipboardList,
   PlusCircle,
   MessageSquare,
+  GraduationCap,
   Menu,
   X
 } from 'lucide-react';
@@ -31,6 +32,7 @@ export const Navbar = () => {
   const navLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Meetings', path: '/meetings', icon: Video },
+    { name: 'Mock Tests', path: '/mock-tests', icon: GraduationCap },
     { name: 'Create Meeting', path: '/meetings/create', icon: PlusCircle },
     { name: 'Attendance', path: '/attendance', icon: ClipboardList },
     { name: 'Feedback', path: '/feedback', icon: MessageSquare },
@@ -297,3 +299,4 @@ export const Navbar = () => {
     </nav>
   );
 };
+

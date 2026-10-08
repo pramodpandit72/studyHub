@@ -19,6 +19,8 @@ const CreateMeeting = lazy(() => import('./pages/CreateMeeting').then((m) => ({ 
 const JoinMeeting = lazy(() => import('./pages/JoinMeeting').then((m) => ({ default: m.JoinMeeting })));
 const MeetingRoom = lazy(() => import('./pages/MeetingRoom').then((m) => ({ default: m.MeetingRoom })));
 const Attendance = lazy(() => import('./pages/Attendance').then((m) => ({ default: m.Attendance })));
+const MockTests = lazy(() => import('./pages/MockTests').then((m) => ({ default: m.MockTests })));
+const MockTestAttempt = lazy(() => import('./pages/MockTestAttempt').then((m) => ({ default: m.MockTestAttempt })));
 const Profile = lazy(() => import('./pages/Profile').then((m) => ({ default: m.Profile })));
 const Feedback = lazy(() => import('./pages/Feedback').then((m) => ({ default: m.Feedback })));
 const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })));
@@ -108,6 +110,22 @@ export default function App() {
                     element={
                       <ProtectedRoute>
                         <Attendance />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/mock-tests"
+                    element={
+                      <ProtectedRoute>
+                        <MockTests />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/mock-tests/:id"
+                    element={
+                      <ProtectedRoute>
+                        <MockTestAttempt />
                       </ProtectedRoute>
                     }
                   />

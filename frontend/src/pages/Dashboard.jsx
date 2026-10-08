@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
   ArrowRight,
+  GraduationCap,
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
@@ -117,69 +118,118 @@ export const Dashboard = () => {
       </div>
 
       {/* Main Quick Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Instant Meeting */}
-        <Link
-          to="/meetings/create?type=instant"
-          className="card p-5 hover:border-neutral-500 transition group flex items-start gap-4"
-        >
-          <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform">
-            <Video size={22} />
+        <div className="card p-5 hover:border-neutral-500 transition group flex flex-col justify-between">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform shrink-0">
+              <Video size={22} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-text-primary">
+                Start Instant Meeting
+              </h2>
+              <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                Start a live meeting right now and share the code with others.
+              </p>
+              <p className="text-xs text-text-secondary/80 mt-1 leading-relaxed">
+                Instant one-click HD video rooms with live chat, audio, and screen sharing.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-sm font-semibold text-text-primary">
+          <div className="mt-4 pt-3 border-t border-border-color">
+            <Link
+              to="/meetings/create?type=instant"
+              className="btn btn-primary btn-sm w-full justify-center"
+            >
               Start Instant Meeting
-            </h2>
-            <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-              Start a live meeting right now and share the code with others.
-            </p>
-            <p className="text-xs text-text-secondary/80 mt-1 leading-relaxed">
-              Instant one-click HD video rooms with live chat, audio, and screen sharing.
-            </p>
+            </Link>
           </div>
-        </Link>
+        </div>
+
+        {/* Mock Test */}
+        <div className="card p-5 hover:border-neutral-500 transition group flex flex-col justify-between">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform shrink-0">
+              <GraduationCap size={22} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-text-primary">
+                Mock Test
+              </h2>
+              <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                Practice with mock tests designed for government exam preparation.
+              </p>
+              <p className="text-xs text-text-secondary/80 mt-1 leading-relaxed">
+                Attempt timed tests, submit answers, and check your score and performance.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-border-color">
+            <Link
+              to="/mock-tests"
+              className="btn btn-primary btn-sm w-full justify-center"
+            >
+              Take Mock Test
+            </Link>
+          </div>
+        </div>
 
         {/* Schedule Meeting */}
-        <Link
-          to="/meetings/create?type=scheduled"
-          className="card p-5 hover:border-neutral-500 transition group flex items-start gap-4"
-        >
-          <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform">
-            <Calendar size={22} />
+        <div className="card p-5 hover:border-neutral-500 transition group flex flex-col justify-between">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform shrink-0">
+              <Calendar size={22} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-text-primary">
+                Schedule Meeting
+              </h2>
+              <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                Plan upcoming classes, tutoring, or webinars in advance.
+              </p>
+              <p className="text-xs text-text-secondary/80 mt-1 leading-relaxed">
+                Set custom dates, recurring lecture sessions, and automated reminder alerts.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-sm font-semibold text-text-primary">
+          <div className="mt-4 pt-3 border-t border-border-color">
+            <Link
+              to="/meetings/create?type=scheduled"
+              className="btn btn-secondary btn-sm w-full justify-center"
+            >
               Schedule Meeting
-            </h2>
-            <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-              Plan upcoming classes, tutoring, or webinars in advance.
-            </p>
-            <p className="text-xs text-text-secondary/80 mt-1 leading-relaxed">
-              Set custom dates, recurring lecture sessions, and automated reminder alerts.
-            </p>
+            </Link>
           </div>
-        </Link>
+        </div>
 
         {/* Attendance Records */}
-        <Link
-          to="/attendance"
-          className="card p-5 hover:border-neutral-500 transition group flex items-start gap-4"
-        >
-          <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform">
-            <Users size={22} />
+        <div className="card p-5 hover:border-neutral-500 transition group flex flex-col justify-between">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform shrink-0">
+              <Users size={22} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-text-primary">
+                Attendance Records
+              </h2>
+              <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                Check attendance, join times, and duration for your meetings.
+              </p>
+              <p className="text-xs text-text-secondary/80 mt-1 leading-relaxed">
+                Export downloadable attendance reports and track student engagement stats.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-sm font-semibold text-text-primary">
-              Attendance Records
-            </h2>
-            <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-              Check attendance, join times, and duration for your meetings.
-            </p>
-            <p className="text-xs text-text-secondary/80 mt-1 leading-relaxed">
-              Export downloadable attendance reports and track student engagement stats.
-            </p>
+          <div className="mt-4 pt-3 border-t border-border-color">
+            <Link
+              to="/attendance"
+              className="btn btn-secondary btn-sm w-full justify-center"
+            >
+              View Attendance
+            </Link>
           </div>
-        </Link>
+        </div>
       </div>
 
       {/* Grid: Upcoming Meetings & Recent Sessions */}

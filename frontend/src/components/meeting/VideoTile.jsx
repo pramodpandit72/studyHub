@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
-import { Mic, MicOff, User, Volume2 } from 'lucide-react';
+import { Mic, MicOff, User, Volume2, Radio } from 'lucide-react';
 
 export const VideoTile = ({
   stream,
@@ -13,23 +13,64 @@ export const VideoTile = ({
   const videoRef = useRef(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
+  const audioRef = useRef(null);
+
+  const [videoTrackCount, setVideoTrackCount] = useState(0);
+
+  // Dynamically listen for track additions, un-mutes, and removals on stream
+  useEffect(() => {
+    if (!stream) {
+      setVideoTrackCount(0);
+      return;
+    }
+
+    const checkTracks = () => {
+      const activeTracks = stream.getVideoTracks().filter((t) => t.readyState === 'live');
+      setVideoTrackCount(activeTracks.length);
+    };
+
+    checkTracks();
+
+    stream.addEventListener('addtrack', checkTracks);
+    stream.addEventListener('removetrack', checkTracks);
+
+    const tracks = stream.getVideoTracks();
+    tracks.forEach((t) => {
+      t.addEventListener('mute', checkTracks);
+      t.addEventListener('unmute', checkTracks);
+      t.addEventListener('ended', checkTracks);
+    });
+
+    return () => {
+      stream.removeEventListener('addtrack', checkTracks);
+      stream.removeEventListener('removetrack', checkTracks);
+      tracks.forEach((t) => {
+        t.removeEventListener('mute', checkTracks);
+        t.removeEventListener('unmute', checkTracks);
+        t.removeEventListener('ended', checkTracks);
+      });
+    };
+  }, [stream]);
+
   // Attach stream to video element
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
-      const playPromise = videoRef.current.play?.();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.debug('Video play catch:', err.message);
-          // If browser autoplay policy blocks unmuted video for presenter, mute and retry play so video displays
-          if (role === 'presenter' && !videoRef.current.muted) {
-            videoRef.current.muted = true;
-            videoRef.current.play?.().catch(() => {});
-          }
-        });
-      }
+      videoRef.current.play?.().catch((err) => {
+        console.debug('Video autoplay catch:', err.message);
+      });
     }
   }, [stream, role]);
+
+  // Attach audio stream for remote participants to bypass video-level autoplay blocking
+  useEffect(() => {
+    if (audioRef.current && stream && !isLocal) {
+      audioRef.current.srcObject = stream;
+      audioRef.current.play?.().catch((err) => {
+        console.debug('Audio autoplay catch:', err.message);
+      });
+    }
+  }, [stream, isLocal]);
 
   // Active speaker detection via Web Audio API
   useEffect(() => {
@@ -109,7 +150,7 @@ export const VideoTile = ({
   }, [stream, isAudioEnabled]);
 
   const isPresenter = role === 'presenter';
-  const hasActiveVideo = (isVideoEnabled || isPresenter) && stream && stream.getVideoTracks().length > 0;
+  const hasActiveVideo = (isVideoEnabled || isPresenter) && (videoTrackCount > 0 || (stream && stream.getVideoTracks().some((t) => t.readyState === "live")));
 
   return (
     <div
@@ -119,12 +160,12 @@ export const VideoTile = ({
           : 'border-neutral-800'
       }`}
     >
-      {/* Video Element (Kept active in DOM with opacity-0 so remote audio continues playing when video is off) */}
+      {/* Video Element (Muted for local camera and presenter screen share to guarantee browser autoplay) */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
-        muted={isLocal}
+        muted={isLocal || isPresenter}
         className={`w-full h-full ${
           isPresenter ? 'object-contain' : 'object-cover'
         } transition-opacity duration-200 ${
@@ -132,8 +173,21 @@ export const VideoTile = ({
         } ${isLocal && !isPresenter ? 'scale-x-[-1]' : ''}`}
       />
 
-      {/* Avatar Fallback when Video is off */}
-      {!hasActiveVideo && (
+      {/* Hidden audio element for remote stream audio */}
+      {!isLocal && (
+        <audio ref={audioRef} autoPlay playsInline />
+      )}
+
+      {/* Presenter connecting state or Avatar Fallback */}
+      {!hasActiveVideo && isPresenter ? (
+        <div className="flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200">
+          <div className="w-16 h-16 rounded-2xl bg-neutral-900 border border-neutral-700 flex items-center justify-center text-white mb-3 shadow-lg">
+            <Radio size={28} className="animate-pulse text-indigo-400" />
+          </div>
+          <span className="text-sm font-semibold text-neutral-200">{name}</span>
+          <span className="text-xs text-neutral-400 mt-1">Connecting to screen share...</span>
+        </div>
+      ) : !hasActiveVideo && (
         <div className="flex flex-col items-center justify-center p-4">
           <div
             className={`w-20 h-20 rounded-full bg-neutral-900 border-2 flex items-center justify-center text-white text-2xl font-bold shadow-inner transition-all duration-200 ${

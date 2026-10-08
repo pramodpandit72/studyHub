@@ -405,12 +405,43 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     });
 
     // Screen Share start / stop notifications
-    socket.on('screen-share-started', ({ socketId, user }) => {
-      setActiveScreenShare({ socketId, user });
+    socket.on('screen-share-started', ({ socketId, user, userId, name }) => {
+      setActiveScreenShare({
+        socketId,
+        userId: userId || user?._id,
+        name: name || user?.name,
+        user,
+      });
+
+      // Refresh remote streams from peer receivers
+      const peer = peersRef.current[socketId];
+      if (peer) {
+        const receivers = peer.getReceivers ? peer.getReceivers() : [];
+        const tracks = receivers.map((r) => r.track).filter(Boolean);
+        if (tracks.length > 0) {
+          setRemoteStreams((prev) => ({
+            ...prev,
+            [socketId]: new MediaStream(tracks),
+          }));
+        }
+      }
     });
 
     socket.on('screen-share-stopped', ({ socketId }) => {
       setActiveScreenShare((curr) => (curr?.socketId === socketId ? null : curr));
+
+      // Refresh remote streams from peer receivers
+      const peer = peersRef.current[socketId];
+      if (peer) {
+        const receivers = peer.getReceivers ? peer.getReceivers() : [];
+        const tracks = receivers.map((r) => r.track).filter(Boolean);
+        if (tracks.length > 0) {
+          setRemoteStreams((prev) => ({
+            ...prev,
+            [socketId]: new MediaStream(tracks),
+          }));
+        }
+      }
     });
 
     // Force Stop Screen Share (e.g. host revoked permission)
@@ -672,13 +703,22 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     setScreenStream(null);
     setIsScreenSharing(false);
 
-    // Restore camera track to peers if camera is enabled and renegotiate
+    // Restore camera track to peers if camera is enabled & renegotiate
     const restoreTrack = isVideoEnabledRef.current && cameraTrackRef.current ? cameraTrackRef.current : null;
     for (const [remoteSocketId, peer] of Object.entries(peersRef.current)) {
       try {
+        const transceivers = peer.getTransceivers ? peer.getTransceivers() : [];
+        const vt = transceivers.find(
+          (t) => t.receiver?.track?.kind === 'video' || t.sender?.track?.kind === 'video'
+        );
+        if (vt && !restoreTrack) {
+          vt.direction = 'sendrecv';
+        }
         const videoSender = getVideoSender(peer);
         if (videoSender) {
           await videoSender.replaceTrack(restoreTrack);
+        } else if (restoreTrack) {
+          peer.addTrack(restoreTrack, localStreamRef.current);
         }
         await renegotiatePeer(remoteSocketId, peer);
       } catch (e) {
@@ -687,7 +727,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     }
 
     socketRef.current?.emit('screen-share-stopped', { roomId });
-  }, [roomId, renegotiatePeer]);
+  }, [roomId]);
 
   // Start Screen Share
   const startScreenShare = useCallback(async () => {
@@ -711,6 +751,13 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       // Replace video sender on all peers with the screen track & renegotiate
       for (const [remoteSocketId, peer] of Object.entries(peersRef.current)) {
         try {
+          const transceivers = peer.getTransceivers ? peer.getTransceivers() : [];
+          const vt = transceivers.find(
+            (t) => t.receiver?.track?.kind === 'video' || t.sender?.track?.kind === 'video'
+          );
+          if (vt) {
+            vt.direction = 'sendrecv';
+          }
           const videoSender = getVideoSender(peer);
           if (videoSender) {
             await videoSender.replaceTrack(screenTrack);

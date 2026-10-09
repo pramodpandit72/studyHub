@@ -9,11 +9,8 @@ import {
   LogOut,
   User,
   LayoutDashboard,
-  Calendar,
   ClipboardList,
   PlusCircle,
-  MessageSquare,
-  GraduationCap,
   Menu,
   X
 } from 'lucide-react';
@@ -29,13 +26,11 @@ export const Navbar = () => {
     navigate('/login');
   };
 
+  // Clean, uncluttered navigation links - essential pages only
   const navLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Meetings', path: '/meetings', icon: Video },
-    { name: 'Mock Tests', path: '/mock-tests', icon: GraduationCap },
-    { name: 'Create Meeting', path: '/meetings/create', icon: PlusCircle },
     { name: 'Attendance', path: '/attendance', icon: ClipboardList },
-    { name: 'Feedback', path: '/feedback', icon: MessageSquare },
     { name: 'Profile', path: '/profile', icon: User },
   ];
 
@@ -85,9 +80,6 @@ export const Navbar = () => {
                 <a href="/#how-it-works" className="hover:text-text-primary transition-colors">
                   How It Works
                 </a>
-                <Link to="/feedback" className="hover:text-text-primary transition-colors">
-                  Feedback
-                </Link>
               </div>
             )}
           </div>
@@ -104,19 +96,9 @@ export const Navbar = () => {
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
 
-            {/* Guest Feedback link */}
-            {!isAuthenticated && (
-              <Link
-                to="/feedback"
-                className="hidden sm:inline-flex items-center gap-1 text-xs font-medium text-text-secondary hover:text-text-primary px-2.5 py-1.5 rounded-md border border-border-color hover:bg-surface-100 dark:hover:bg-surface-800 transition"
-              >
-                <MessageSquare size={14} />
-                <span>Feedback</span>
-              </Link>
-            )}
-
             {isAuthenticated ? (
               <div className="hidden sm:flex items-center gap-2.5">
+                {/* Single, non-duplicate primary CTA for creating meetings */}
                 <Link
                   to="/meetings/create"
                   className="btn btn-primary btn-sm flex items-center gap-1.5"
@@ -271,14 +253,6 @@ export const Navbar = () => {
                 </span>
               </button>
               <Link
-                to="/feedback"
-                onClick={() => setMobileMenuOpen(false)}
-                className="btn btn-secondary w-full justify-center"
-              >
-                <MessageSquare size={16} />
-                <span>Feedback</span>
-              </Link>
-              <Link
                 to="/login"
                 onClick={() => setMobileMenuOpen(false)}
                 className="btn btn-secondary w-full justify-center"
@@ -299,4 +273,3 @@ export const Navbar = () => {
     </nav>
   );
 };
-

@@ -33,7 +33,7 @@ export const setupMeetingSocket = (io) => {
       return Boolean(room.hostUserId && room.hostUserId === socket.user._id.toString());
     };
 
-    socket.on('join-room', async ({ meetingId, meetingCode }) => {
+    socket.on('join-room', async ({ meetingId, meetingCode, initialAudio = false, initialVideo = false }) => {
       const roomId = meetingCode || meetingId;
       if (!roomId) return;
 
@@ -90,8 +90,8 @@ export const setupMeetingSocket = (io) => {
         name: socket.user.name,
         role: isHost ? 'host' : socket.user.role,
         socketId: socket.id,
-        audio: false,
-        video: false,
+        audio: Boolean(initialAudio),
+        video: Boolean(initialVideo),
         isHost,
         canShareScreen,
       };
@@ -128,15 +128,15 @@ export const setupMeetingSocket = (io) => {
 
     // WebRTC Signaling
     socket.on('offer', ({ to, offer }) => {
-      socket.to(to).emit('offer', { from: socket.id, offer });
+      io.to(to).emit('offer', { from: socket.id, offer });
     });
 
     socket.on('answer', ({ to, answer }) => {
-      socket.to(to).emit('answer', { from: socket.id, answer });
+      io.to(to).emit('answer', { from: socket.id, answer });
     });
 
     socket.on('ice-candidate', ({ to, candidate }) => {
-      socket.to(to).emit('ice-candidate', { from: socket.id, candidate });
+      io.to(to).emit('ice-candidate', { from: socket.id, candidate });
     });
 
     // Participant Media Toggles
@@ -481,4 +481,5 @@ export const setupMeetingSocket = (io) => {
 
   });
 };
+
 

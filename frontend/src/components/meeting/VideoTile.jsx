@@ -11,13 +11,11 @@ export const VideoTile = ({
   isHost = false,
 }) => {
   const videoRef = useRef(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-
   const audioRef = useRef(null);
-
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [videoTrackCount, setVideoTrackCount] = useState(0);
 
-  // Dynamically listen for track additions, un-mutes, and removals on stream
+  // Dynamically track live, unmuted video tracks on stream
   useEffect(() => {
     if (!stream) {
       setVideoTrackCount(0);
@@ -25,7 +23,7 @@ export const VideoTile = ({
     }
 
     const checkTracks = () => {
-      const activeTracks = stream.getVideoTracks().filter((t) => t.readyState === 'live');
+      const activeTracks = stream.getVideoTracks().filter((t) => t.readyState === 'live' && !t.muted);
       setVideoTrackCount(activeTracks.length);
     };
 
@@ -53,6 +51,7 @@ export const VideoTile = ({
   }, [stream]);
 
   // Attach stream to video element
+  // Always muted so video frames decode and render immediately across all browsers
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
@@ -62,13 +61,25 @@ export const VideoTile = ({
     }
   }, [stream, role]);
 
-  // Attach audio stream for remote participants to bypass video-level autoplay blocking
+  // Attach audio stream for remote participants and handle browser autoplay policy
   useEffect(() => {
     if (audioRef.current && stream && !isLocal) {
       audioRef.current.srcObject = stream;
-      audioRef.current.play?.().catch((err) => {
-        console.debug('Audio autoplay catch:', err.message);
-      });
+      const playPromise = audioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.debug('Remote audio autoplay waiting for user interaction:', err.message);
+          const unlockAudio = () => {
+            audioRef.current?.play().catch(() => {});
+            window.removeEventListener('click', unlockAudio);
+            window.removeEventListener('keydown', unlockAudio);
+            window.removeEventListener('touchstart', unlockAudio);
+          };
+          window.addEventListener('click', unlockAudio, { once: true });
+          window.addEventListener('keydown', unlockAudio, { once: true });
+          window.addEventListener('touchstart', unlockAudio, { once: true });
+        });
+      }
     }
   }, [stream, isLocal]);
 
@@ -130,7 +141,6 @@ export const VideoTile = ({
 
       checkVolume();
     } catch (e) {
-      // AudioContext policy or device unsupported
       console.debug('Audio analyser init error:', e.message);
     }
 
@@ -150,7 +160,12 @@ export const VideoTile = ({
   }, [stream, isAudioEnabled]);
 
   const isPresenter = role === 'presenter';
-  const hasActiveVideo = (isVideoEnabled || isPresenter) && (videoTrackCount > 0 || (stream && stream.getVideoTracks().some((t) => t.readyState === "live")));
+  const hasLiveVideoTrack = Boolean(
+    stream && stream.getVideoTracks().some((t) => t.readyState === 'live' && !t.muted)
+  );
+  const hasActiveVideo = isLocal
+    ? isVideoEnabled
+    : (isPresenter || isVideoEnabled || hasLiveVideoTrack || videoTrackCount > 0);
 
   return (
     <div
@@ -160,12 +175,12 @@ export const VideoTile = ({
           : 'border-neutral-800'
       }`}
     >
-      {/* Video Element (Muted for local camera and presenter screen share to guarantee browser autoplay) */}
+      {/* Video Element - ALWAYS MUTED so video frames render immediately without autoplay blocking */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
-        muted={isLocal || isPresenter}
+        muted
         className={`w-full h-full ${
           isPresenter ? 'object-contain' : 'object-cover'
         } transition-opacity duration-200 ${

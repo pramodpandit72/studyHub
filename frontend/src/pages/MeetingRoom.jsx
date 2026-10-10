@@ -223,16 +223,6 @@ export const MeetingRoom = () => {
       {/* Top Header */}
       <header className="h-14 px-4 bg-surface-50/95 dark:bg-surface-900/95 border-b border-border-color flex items-center justify-between shrink-0 z-10 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          {!isHost && (
-            <button
-              onClick={handleLeaveMeeting}
-              className="btn btn-secondary btn-sm text-xs flex items-center gap-1.5"
-              title="Leave room and return to meetings"
-            >
-              <ArrowLeft size={14} />
-              <span>← Leave</span>
-            </button>
-          )}
           <div>
             <h2 className="text-sm font-semibold truncate max-w-xs sm:max-w-md text-text-primary">
               {meeting.title}

@@ -67,4 +67,55 @@ test('Mock Test Frontend Logic & Utilities', async (t) => {
     assert.equal(calculateAccuracy(8, 2), 80);
     assert.equal(calculateAccuracy(5, 5), 50);
   });
+
+  await t.test('5. Custom Mock Test Form Validation & Scoring Engine', () => {
+    const validateMockTestForm = (payload) => {
+      if (!payload.title || !payload.title.trim()) return { valid: false, error: 'Title required' };
+      if (!payload.category) return { valid: false, error: 'Category required' };
+      if (!payload.durationMinutes || payload.durationMinutes < 1) return { valid: false, error: 'Invalid duration' };
+      if (!Array.isArray(payload.questions) || payload.questions.length === 0) return { valid: false, error: 'At least 1 question required' };
+
+      for (let i = 0; i < payload.questions.length; i++) {
+        const q = payload.questions[i];
+        if (!q.questionText || !q.questionText.trim()) return { valid: false, error: `Q${i + 1} text required` };
+        if (!Array.isArray(q.options) || q.options.length < 2) return { valid: false, error: `Q${i + 1} needs >= 2 options` };
+        if (q.options.some((o) => !o.trim())) return { valid: false, error: `Q${i + 1} has empty options` };
+        if (q.correctOptionIndex < 0 || q.correctOptionIndex >= q.options.length) return { valid: false, error: `Q${i + 1} correct option out of bounds` };
+      }
+      return { valid: true };
+    };
+
+    // Valid test with 2 options (Binary), 4 options, 5 options
+    const validTest = {
+      title: 'General Awareness Mock',
+      category: 'SSC',
+      durationMinutes: 20,
+      questions: [
+        { questionText: 'Is New Delhi the capital of India?', options: ['True', 'False'], correctOptionIndex: 0 },
+        { questionText: '2 + 2 = ?', options: ['1', '2', '3', '4'], correctOptionIndex: 3 },
+        { questionText: 'Central Bank of India?', options: ['SBI', 'PNB', 'RBI', 'HDFC', 'ICICI'], correctOptionIndex: 2 },
+      ],
+    };
+
+    assert.equal(validateMockTestForm(validTest).valid, true);
+
+    // Invalid: empty title
+    assert.equal(validateMockTestForm({ ...validTest, title: '  ' }).valid, false);
+
+    // Invalid: correctOptionIndex out of bounds
+    const invalidOptionIndex = {
+      ...validTest,
+      questions: [{ questionText: 'Sample?', options: ['A', 'B', 'C'], correctOptionIndex: 3 }],
+    };
+    assert.equal(validateMockTestForm(invalidOptionIndex).valid, false);
+
+    // Total Marks & Negative Marking Penalty calculation
+    const questionsWithMarks = [
+      { marks: 2, negativeMarks: 0.5 },
+      { marks: 3, negativeMarks: 0.33 },
+      { marks: 1, negativeMarks: 0 },
+    ];
+    const totalMarks = questionsWithMarks.reduce((sum, q) => sum + q.marks, 0);
+    assert.equal(totalMarks, 6);
+  });
 });

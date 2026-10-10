@@ -20,6 +20,7 @@ const JoinMeeting = lazy(() => import('./pages/JoinMeeting').then((m) => ({ defa
 const MeetingRoom = lazy(() => import('./pages/MeetingRoom').then((m) => ({ default: m.MeetingRoom })));
 const Attendance = lazy(() => import('./pages/Attendance').then((m) => ({ default: m.Attendance })));
 const MockTests = lazy(() => import('./pages/MockTests').then((m) => ({ default: m.MockTests })));
+const CreateMockTest = lazy(() => import('./pages/CreateMockTest').then((m) => ({ default: m.CreateMockTest })));
 const MockTestAttempt = lazy(() => import('./pages/MockTestAttempt').then((m) => ({ default: m.MockTestAttempt })));
 const Profile = lazy(() => import('./pages/Profile').then((m) => ({ default: m.Profile })));
 const Feedback = lazy(() => import('./pages/Feedback').then((m) => ({ default: m.Feedback })));
@@ -118,6 +119,14 @@ export default function App() {
                     element={
                       <ProtectedRoute>
                         <MockTests />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/mock-tests/create"
+                    element={
+                      <ProtectedRoute>
+                        <CreateMockTest />
                       </ProtectedRoute>
                     }
                   />

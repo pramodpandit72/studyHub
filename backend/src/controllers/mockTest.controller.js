@@ -20,13 +20,15 @@ export const getMockTests = async (req, res) => {
   try {
     await ensureMockTestsSeeded();
 
-    const { category } = req.query;
+    const { category, myCreated } = req.query;
     const filter = {};
-    if (category && category !== 'All') {
+    if (myCreated === 'true' && req.user) {
+      filter.createdBy = req.user._id;
+    } else if (category && category !== 'All') {
       filter.category = category;
     }
 
-    const tests = await MockTest.find(filter).select('-questions.correctOptionIndex -questions.explanation').lean();
+    const tests = await MockTest.find(filter).sort({ createdAt: -1 }).select('-questions.correctOptionIndex -questions.explanation').lean();
 
     const formattedTests = tests.map(test => ({
       _id: test._id,
@@ -37,7 +39,13 @@ export const getMockTests = async (req, res) => {
       totalMarks: test.totalMarks || (test.questions?.length * 2),
       passingPercentage: test.passingPercentage || 40,
       difficulty: test.difficulty || 'Medium',
+      hasNegativeMarking: test.hasNegativeMarking !== false,
+      negativeMarks: test.negativeMarks !== undefined ? test.negativeMarks : 0.5,
+      marksPerQuestion: test.marksPerQuestion || 2,
       questionsCount: test.questions?.length || 0,
+      createdBy: test.createdBy,
+      createdByName: test.createdByName || '',
+      isCustom: Boolean(test.isCustom),
       createdAt: test.createdAt,
     }));
 
@@ -64,7 +72,7 @@ export const getMockTestById = async (req, res) => {
       questionText: q.questionText,
       options: q.options,
       marks: q.marks || 2,
-      negativeMarks: q.negativeMarks || 0.5,
+      negativeMarks: q.negativeMarks !== undefined ? q.negativeMarks : 0.5,
     }));
 
     const responseData = {
@@ -76,7 +84,13 @@ export const getMockTestById = async (req, res) => {
       totalMarks: test.totalMarks || (test.questions.length * 2),
       passingPercentage: test.passingPercentage || 40,
       difficulty: test.difficulty || 'Medium',
+      hasNegativeMarking: test.hasNegativeMarking !== false,
+      negativeMarks: test.negativeMarks !== undefined ? test.negativeMarks : 0.5,
+      marksPerQuestion: test.marksPerQuestion || 2,
       questionsCount: sanitizedQuestions.length,
+      createdBy: test.createdBy,
+      createdByName: test.createdByName || '',
+      isCustom: Boolean(test.isCustom),
       questions: sanitizedQuestions,
     };
 
@@ -84,6 +98,125 @@ export const getMockTestById = async (req, res) => {
   } catch (error) {
     console.error('Error fetching mock test details:', error);
     return sendError(res, 500, 'Failed to fetch mock test details.');
+  }
+};
+
+export const createMockTest = async (req, res) => {
+  try {
+    const {
+      title,
+      category,
+      description = '',
+      durationMinutes = 15,
+      passingPercentage = 40,
+      difficulty = 'Medium',
+      hasNegativeMarking = true,
+      negativeMarks = 0.5,
+      marksPerQuestion = 2,
+      optionsCount = 4,
+      questions = [],
+    } = req.body;
+
+    if (!title || !title.trim()) {
+      return sendError(res, 400, 'Mock test title is required.');
+    }
+
+    if (!category) {
+      return sendError(res, 400, 'Exam category is required.');
+    }
+
+    const parsedDuration = parseInt(durationMinutes, 10);
+    if (isNaN(parsedDuration) || parsedDuration < 1 || parsedDuration > 300) {
+      return sendError(res, 400, 'Duration must be between 1 and 300 minutes.');
+    }
+
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return sendError(res, 400, 'At least one question is required to create a mock test.');
+    }
+
+    // Validate each question
+    const validatedQuestions = [];
+    let calculatedTotalMarks = 0;
+
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      if (!q.questionText || !q.questionText.trim()) {
+        return sendError(res, 400, 'Question ' + (i + 1) + ' must have question text.');
+      }
+
+      if (!Array.isArray(q.options) || q.options.length < 2) {
+        return sendError(res, 400, 'Question ' + (i + 1) + ' must have at least 2 options.');
+      }
+
+      const cleanOptions = q.options.map(opt => (opt !== undefined && opt !== null ? String(opt).trim() : ''));
+      if (cleanOptions.some(opt => opt === '')) {
+        return sendError(res, 400, 'Question ' + (i + 1) + ' has empty options. Please fill all option fields.');
+      }
+
+      const correctIndex = parseInt(q.correctOptionIndex, 10);
+      if (isNaN(correctIndex) || correctIndex < 0 || correctIndex >= cleanOptions.length) {
+        return sendError(res, 400, 'Question ' + (i + 1) + ' must have a valid correct answer option selected.');
+      }
+
+      const qMarks = q.marks !== undefined && !isNaN(Number(q.marks)) ? Math.max(0.5, Number(q.marks)) : Number(marksPerQuestion || 2);
+      const qNegMarks = hasNegativeMarking
+        ? (q.negativeMarks !== undefined && !isNaN(Number(q.negativeMarks)) ? Math.max(0, Number(q.negativeMarks)) : Number(negativeMarks || 0.5))
+        : 0;
+
+      calculatedTotalMarks += qMarks;
+
+      validatedQuestions.push({
+        questionText: q.questionText.trim(),
+        options: cleanOptions,
+        correctOptionIndex: correctIndex,
+        marks: qMarks,
+        negativeMarks: qNegMarks,
+        explanation: q.explanation ? q.explanation.trim() : '',
+      });
+    }
+
+    const newTest = await MockTest.create({
+      title: title.trim(),
+      category,
+      description: description.trim(),
+      durationMinutes: parsedDuration,
+      totalMarks: Math.round(calculatedTotalMarks * 100) / 100,
+      passingPercentage: Math.min(100, Math.max(1, parseInt(passingPercentage, 10) || 40)),
+      difficulty,
+      hasNegativeMarking: Boolean(hasNegativeMarking),
+      negativeMarks: hasNegativeMarking ? Number(negativeMarks || 0.5) : 0,
+      marksPerQuestion: Number(marksPerQuestion || 2),
+      optionsCount: Number(optionsCount || 4),
+      createdBy: req.user._id,
+      createdByName: req.user.name || 'User',
+      isCustom: true,
+      questions: validatedQuestions,
+    });
+
+    return sendSuccess(res, 201, 'Mock test created successfully.', { test: newTest });
+  } catch (error) {
+    console.error('Error creating mock test:', error);
+    return sendError(res, 500, error.message || 'Failed to create mock test.');
+  }
+};
+
+export const deleteMockTest = async (req, res) => {
+  try {
+    const test = await MockTest.findById(req.params.id);
+    if (!test) {
+      return sendError(res, 404, 'Mock test not found.');
+    }
+
+    // Only allow deletion by test creator or admin
+    if (test.createdBy && test.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'Admin') {
+      return sendError(res, 403, 'You are not authorized to delete this mock test.');
+    }
+
+    await MockTest.findByIdAndDelete(req.params.id);
+    return sendSuccess(res, 200, 'Mock test deleted successfully.');
+  } catch (error) {
+    console.error('Error deleting mock test:', error);
+    return sendError(res, 500, 'Failed to delete mock test.');
   }
 };
 
@@ -103,7 +236,6 @@ export const submitMockTest = async (req, res) => {
     const evaluatedAnswers = [];
 
     test.questions.forEach((q, idx) => {
-      // answers can be an object { 0: 1, 1: 2 } or array
       const selected = answers[idx] !== undefined ? answers[idx] : (answers[String(idx)] !== undefined ? answers[String(idx)] : -1);
       const isSelected = selected !== null && selected !== -1 && selected !== undefined;
 
@@ -117,7 +249,7 @@ export const submitMockTest = async (req, res) => {
         correctCount++;
       } else if (isSelected) {
         isCorrect = false;
-        marksAwarded = -(q.negativeMarks || 0.5);
+        marksAwarded = -(q.negativeMarks !== undefined ? q.negativeMarks : 0.5);
         calculatedScore += marksAwarded;
         incorrectCount++;
       } else {

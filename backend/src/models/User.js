@@ -87,7 +87,11 @@ userSchema.pre('save', async function (next) {
 });
 
 userSchema.methods.comparePassword = async function (candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
+  let isMatch = await bcrypt.compare(candidatePassword, this.password);
+  if (!isMatch && typeof candidatePassword === 'string' && candidatePassword.trim() !== candidatePassword) {
+    isMatch = await bcrypt.compare(candidatePassword.trim(), this.password);
+  }
+  return isMatch;
 };
 
 userSchema.methods.toProfile = function () {

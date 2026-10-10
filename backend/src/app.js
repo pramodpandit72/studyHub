@@ -15,6 +15,9 @@ import mockTestRoutes from './routes/mockTest.routes.js';
 
 const app = express();
 
+// Trust reverse proxy (Render, Vercel, Cloudflare, Nginx) so client IP is accurately recorded
+app.set('trust proxy', 1);
+
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 const clientUrls = env.CLIENT_URL

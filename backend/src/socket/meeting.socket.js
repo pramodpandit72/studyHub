@@ -78,8 +78,11 @@ export const setupMeetingSocket = (io) => {
       // Cleanup any previous socket connection for the same user (handles refreshes / reconnects without ghosts)
       for (const [prevSocketId, p] of room.participants) {
         if (p.userId === socket.user._id.toString() && prevSocketId !== socket.id) {
-          room.participants.delete(prevSocketId);
-          socket.to(roomId).emit('participant-left', { socketId: prevSocketId });
+          const prevSocket = io.sockets.sockets.get(prevSocketId);
+          if (!prevSocket || !prevSocket.connected) {
+            room.participants.delete(prevSocketId);
+            socket.to(roomId).emit('participant-left', { socketId: prevSocketId });
+          }
         }
       }
 

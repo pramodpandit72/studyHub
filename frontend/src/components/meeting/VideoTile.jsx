@@ -23,8 +23,20 @@ export const VideoTile = ({
     }
 
     const checkTracks = () => {
-      const activeTracks = stream.getVideoTracks().filter((t) => t.readyState === 'live' && !t.muted);
+      const activeTracks = stream.getVideoTracks().filter((t) => t.readyState === 'live');
       setVideoTrackCount(activeTracks.length);
+      if (activeTracks.length > 0 && videoRef.current) {
+        if (videoRef.current.srcObject !== stream) {
+          videoRef.current.srcObject = stream;
+        }
+        videoRef.current.play?.().catch(() => {});
+      }
+      if (stream.getAudioTracks().length > 0 && audioRef.current && !isLocal) {
+        if (audioRef.current.srcObject !== stream) {
+          audioRef.current.srcObject = stream;
+        }
+        audioRef.current.play?.().catch(() => {});
+      }
     };
 
     checkTracks();
@@ -39,6 +51,13 @@ export const VideoTile = ({
       t.addEventListener('ended', checkTracks);
     });
 
+    const aTracks = stream.getAudioTracks();
+    aTracks.forEach((t) => {
+      t.addEventListener('mute', checkTracks);
+      t.addEventListener('unmute', checkTracks);
+      t.addEventListener('ended', checkTracks);
+    });
+
     return () => {
       stream.removeEventListener('addtrack', checkTracks);
       stream.removeEventListener('removetrack', checkTracks);
@@ -47,19 +66,26 @@ export const VideoTile = ({
         t.removeEventListener('unmute', checkTracks);
         t.removeEventListener('ended', checkTracks);
       });
+      aTracks.forEach((t) => {
+        t.removeEventListener('mute', checkTracks);
+        t.removeEventListener('unmute', checkTracks);
+        t.removeEventListener('ended', checkTracks);
+      });
     };
-  }, [stream]);
+  }, [stream, isLocal, isAudioEnabled]);
 
   // Attach stream to video element
   // Always muted so video frames decode and render immediately across all browsers
   useEffect(() => {
     if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+      }
       videoRef.current.play?.().catch((err) => {
         console.debug('Video autoplay catch:', err.message);
       });
     }
-  }, [stream, role]);
+  }, [stream, role, isVideoEnabled]);
 
   // Attach audio stream for remote participants and handle browser autoplay policy
   useEffect(() => {
@@ -161,7 +187,7 @@ export const VideoTile = ({
 
   const isPresenter = role === 'presenter';
   const hasLiveVideoTrack = Boolean(
-    stream && stream.getVideoTracks().some((t) => t.readyState === 'live' && !t.muted)
+    stream && stream.getVideoTracks().some((t) => t.readyState === 'live')
   );
   const hasActiveVideo = isLocal
     ? isVideoEnabled

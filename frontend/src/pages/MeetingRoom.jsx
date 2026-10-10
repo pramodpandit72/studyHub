@@ -68,6 +68,7 @@ export const MeetingRoom = () => {
 
   // WebRTC Hook
   const {
+    socketId,
     localStream,
     screenStream,
     remoteStreams,
@@ -186,7 +187,12 @@ export const MeetingRoom = () => {
   if (loading || !meeting) return <PageLoader />;
 
   // Filter remote participants based on actual participant list
-  const remoteParticipants = participants.filter((p) => p.userId !== user?._id);
+  const remoteParticipants = participants.filter((p) => {
+    if (socketId && p.socketId === socketId) return false;
+    if (user?._id && p.userId && String(p.userId) !== String(user._id)) return true;
+    if (socketId && p.socketId !== socketId) return true;
+    return false;
+  });
 
   const activeSharerId = activeScreenShare?.userId || activeScreenShare?.user?._id;
   const isRemoteScreenSharing = Boolean(

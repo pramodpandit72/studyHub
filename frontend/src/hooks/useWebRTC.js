@@ -172,16 +172,22 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         stream.addTrack(event.track);
       }
 
+      const freshStream = new MediaStream(stream.getTracks());
+      remoteStreamsRef.current[remoteSocketId] = freshStream;
       setRemoteStreams((prev) => ({
         ...prev,
-        [remoteSocketId]: stream,
+        [remoteSocketId]: freshStream,
       }));
 
       event.track.onunmute = () => {
-        setRemoteStreams((prev) => ({ ...prev, [remoteSocketId]: stream }));
+        const unmutedStream = new MediaStream(stream.getTracks());
+        remoteStreamsRef.current[remoteSocketId] = unmutedStream;
+        setRemoteStreams((prev) => ({ ...prev, [remoteSocketId]: unmutedStream }));
       };
       event.track.onended = () => {
-        setRemoteStreams((prev) => ({ ...prev, [remoteSocketId]: stream }));
+        const endedStream = new MediaStream(stream.getTracks().filter((t) => t.readyState !== "ended"));
+        remoteStreamsRef.current[remoteSocketId] = endedStream;
+        setRemoteStreams((prev) => ({ ...prev, [remoteSocketId]: endedStream }));
       };
     };
 
@@ -392,7 +398,10 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         prev.map((p) => (p.socketId === socketId ? { ...p, audio: enabled } : p))
       );
       if (remoteStreamsRef.current[socketId]) {
-        setRemoteStreams((prev) => ({ ...prev, [socketId]: remoteStreamsRef.current[socketId] }));
+        const currentStream = remoteStreamsRef.current[socketId];
+        const refreshed = new MediaStream(currentStream.getTracks());
+        remoteStreamsRef.current[socketId] = refreshed;
+        setRemoteStreams((prev) => ({ ...prev, [socketId]: refreshed }));
       }
     });
 
@@ -401,7 +410,10 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         prev.map((p) => (p.socketId === socketId ? { ...p, video: enabled } : p))
       );
       if (remoteStreamsRef.current[socketId]) {
-        setRemoteStreams((prev) => ({ ...prev, [socketId]: remoteStreamsRef.current[socketId] }));
+        const currentStream = remoteStreamsRef.current[socketId];
+        const refreshed = new MediaStream(currentStream.getTracks());
+        remoteStreamsRef.current[socketId] = refreshed;
+        setRemoteStreams((prev) => ({ ...prev, [socketId]: refreshed }));
       }
     });
 
@@ -856,6 +868,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
   }, [roomId]);
 
   return {
+    socketId: socketRef.current?.id || null,
     localStream,
     screenStream,
     remoteStreams,

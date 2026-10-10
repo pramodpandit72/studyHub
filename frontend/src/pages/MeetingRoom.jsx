@@ -72,6 +72,8 @@ export const MeetingRoom = () => {
     localStream,
     screenStream,
     remoteStreams,
+    remoteFrames,
+    remoteScreenShareFrame,
     participants,
     messages,
 
@@ -376,6 +378,7 @@ export const MeetingRoom = () => {
                   <div className="relative w-full h-full flex items-center justify-center">
                     <VideoTile
                       stream={remoteStreams[activeScreenShare.socketId]}
+                      frame={remoteScreenShareFrame}
                       name={`${activeScreenShare.user?.name || activeScreenShare.name || 'Participant'}'s Screen`}
                       role="presenter"
                       isAudioEnabled={
@@ -434,6 +437,7 @@ export const MeetingRoom = () => {
                     <div key={participant.socketId} className="w-48 lg:w-full h-32 shrink-0">
                       <VideoTile
                         stream={remoteStreams[participant.socketId] || null}
+                        frame={remoteFrames[participant.socketId] || null}
                         name={participant.name || 'Participant'}
                         role={participant.role || 'participant'}
                         isAudioEnabled={participant.audio || false}
@@ -464,6 +468,7 @@ export const MeetingRoom = () => {
                 <VideoTile
                   key={participant.socketId}
                   stream={remoteStreams[participant.socketId] || null}
+                  frame={remoteFrames[participant.socketId] || null}
                   name={participant.name || 'Participant'}
                   role={participant.role || 'participant'}
                   isAudioEnabled={participant.audio || false}

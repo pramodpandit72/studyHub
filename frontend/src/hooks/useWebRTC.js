@@ -27,6 +27,11 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
   const [activePoll, setActivePoll] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // connecting, connected, disconnected, error
   const [mediaError, setMediaError] = useState(null);
+  const [remoteFrames, setRemoteFrames] = useState({}); // { socketId: dataUrl }
+  const [remoteScreenShareFrame, setRemoteScreenShareFrame] = useState(null); // dataUrl
+  const audioElementsRef = useRef(new Map()); // { socketId: HTMLAudioElement }
+  const cameraFrameIntervalRef = useRef(null);
+  const screenFrameIntervalRef = useRef(null);
 
   const localStreamRef = useRef(null);
   const cameraTrackRef = useRef(null);
@@ -84,6 +89,98 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     }
   }, []);
 
+  // Play remote audio through in-memory HTMLAudioElement (reference pattern)
+  const playRemoteAudio = useCallback((remoteSocketId, stream) => {
+    try {
+      if (!stream || stream.getAudioTracks().length === 0) return;
+      let audioEl = audioElementsRef.current.get(remoteSocketId);
+      if (!audioEl) {
+        audioEl = new Audio();
+        audioEl.autoplay = true;
+        audioElementsRef.current.set(remoteSocketId, audioEl);
+      }
+      audioEl.srcObject = stream;
+      const p = audioEl.play();
+      if (p !== undefined) {
+        p.catch((err) => {
+          console.debug("Background audio play pending gesture:", err.message);
+          const unlock = () => {
+            audioEl.play().catch(() => {});
+            window.removeEventListener("click", unlock);
+            window.removeEventListener("keydown", unlock);
+            window.removeEventListener("touchstart", unlock);
+          };
+          window.addEventListener("click", unlock, { once: true });
+          window.addEventListener("keydown", unlock, { once: true });
+          window.addEventListener("touchstart", unlock, { once: true });
+        });
+      }
+    } catch (e) {
+      console.debug("playRemoteAudio error:", e.message);
+    }
+  }, []);
+
+  const startCameraFrameCapture = useCallback((stream) => {
+    if (cameraFrameIntervalRef.current) clearInterval(cameraFrameIntervalRef.current);
+    if (!stream) return;
+    const vid = document.createElement("video");
+    vid.srcObject = stream;
+    vid.muted = true;
+    vid.playsInline = true;
+    vid.play().catch(() => {});
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    cameraFrameIntervalRef.current = setInterval(() => {
+      if (vid.readyState >= 2 && socketRef.current?.connected && isVideoEnabledRef.current) {
+        canvas.width = 240;
+        canvas.height = 180;
+        ctx.drawImage(vid, 0, 0, 240, 180);
+        const frame = canvas.toDataURL("image/jpeg", 0.45);
+        socketRef.current.emit("camera-frame", { roomId, frame });
+      }
+    }, 400);
+  }, [roomId]);
+
+  const stopCameraFrameCapture = useCallback(() => {
+    if (cameraFrameIntervalRef.current) {
+      clearInterval(cameraFrameIntervalRef.current);
+      cameraFrameIntervalRef.current = null;
+    }
+  }, []);
+
+  const startScreenFrameCapture = useCallback((stream) => {
+    if (screenFrameIntervalRef.current) clearInterval(screenFrameIntervalRef.current);
+    if (!stream) return;
+    const vid = document.createElement("video");
+    vid.srcObject = stream;
+    vid.muted = true;
+    vid.playsInline = true;
+    vid.play().catch(() => {});
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    screenFrameIntervalRef.current = setInterval(() => {
+      if (vid.readyState >= 2 && socketRef.current?.connected && isScreenSharingRef.current) {
+        const scale = Math.min(1, 640 / (vid.videoWidth || 640));
+        canvas.width = (vid.videoWidth || 640) * scale;
+        canvas.height = (vid.videoHeight || 480) * scale;
+        ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+        const frame = canvas.toDataURL("image/jpeg", 0.5);
+        socketRef.current.emit("screen-share-frame", { roomId, frame });
+      }
+    }, 500);
+  }, [roomId]);
+
+  const stopScreenFrameCapture = useCallback(() => {
+    if (screenFrameIntervalRef.current) {
+      clearInterval(screenFrameIntervalRef.current);
+      screenFrameIntervalRef.current = null;
+    }
+  }, []);
+
   // Close and clean up a single peer connection
   const closePeer = useCallback((remoteSocketId) => {
     if (peersRef.current[remoteSocketId]) {
@@ -95,6 +192,16 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       delete peersRef.current[remoteSocketId];
       delete iceCandidatesQueueRef.current[remoteSocketId];
       delete remoteStreamsRef.current[remoteSocketId];
+      const audioEl = audioElementsRef.current.get(remoteSocketId);
+      if (audioEl) {
+        audioEl.srcObject = null;
+        audioElementsRef.current.delete(remoteSocketId);
+      }
+      setRemoteFrames((prev) => {
+        const next = { ...prev };
+        delete next[remoteSocketId];
+        return next;
+      });
       setPeers((prev) => {
         const next = { ...prev };
         delete next[remoteSocketId];
@@ -179,10 +286,17 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         [remoteSocketId]: freshStream,
       }));
 
+      if (event.track.kind === "audio") {
+        playRemoteAudio(remoteSocketId, freshStream);
+      }
+
       event.track.onunmute = () => {
         const unmutedStream = new MediaStream(stream.getTracks());
         remoteStreamsRef.current[remoteSocketId] = unmutedStream;
         setRemoteStreams((prev) => ({ ...prev, [remoteSocketId]: unmutedStream }));
+        if (event.track.kind === "audio") {
+          playRemoteAudio(remoteSocketId, unmutedStream);
+        }
       };
       event.track.onended = () => {
         const endedStream = new MediaStream(stream.getTracks().filter((t) => t.readyState !== "ended"));
@@ -444,6 +558,15 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       }
     });
 
+    // Socket frame relays (reference pattern)
+    socket.on('camera-frame', ({ socketId, frame }) => {
+      setRemoteFrames((prev) => ({ ...prev, [socketId]: frame }));
+    });
+
+    socket.on('screen-share-frame', ({ frame }) => {
+      setRemoteScreenShareFrame(frame);
+    });
+
     // Force Stop Screen Share (e.g. host revoked permission)
     socket.on('force-stop-screen-share', async () => {
       if (isScreenSharingRef.current) {
@@ -551,6 +674,8 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         socketRef.current.off('participant-left');
         socketRef.current.off('screen-share-started');
         socketRef.current.off('screen-share-stopped');
+        socketRef.current.off('camera-frame');
+        socketRef.current.off('screen-share-frame');
         socketRef.current.off('force-stop-screen-share');
         socketRef.current.off('screen-share-denied');
         socketRef.current.off('force-mute');
@@ -660,6 +785,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
           }
         }
 
+        stopCameraFrameCapture();
         socketRef.current?.emit('toggle-video', { roomId, enabled: false });
         return;
       }
@@ -705,6 +831,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       }
 
       setIsVideoEnabled(true);
+      startCameraFrameCapture(localStreamRef.current);
       socketRef.current?.emit('toggle-video', { roomId, enabled: true });
     } catch (err) {
       console.warn('Camera toggle failed:', err);
@@ -736,8 +863,9 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       }
     }
 
+    stopScreenFrameCapture();
     socketRef.current?.emit('screen-share-stopped', { roomId });
-  }, [roomId]);
+  }, [roomId, stopScreenFrameCapture]);
 
   // Start Screen Share
   const startScreenShare = useCallback(async () => {
@@ -780,6 +908,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       }
 
       setIsScreenSharing(true);
+      startScreenFrameCapture(displayStream);
       socketRef.current?.emit('screen-share-started', { roomId });
     } catch (err) {
       if (err.name !== 'NotAllowedError') {
@@ -872,6 +1001,8 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     localStream,
     screenStream,
     remoteStreams,
+    remoteFrames,
+    remoteScreenShareFrame,
     peers,
     participants,
     messages,

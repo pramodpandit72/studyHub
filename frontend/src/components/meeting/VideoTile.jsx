@@ -3,6 +3,7 @@ import { Mic, MicOff, User, Volume2, Radio } from 'lucide-react';
 
 export const VideoTile = ({
   stream,
+  frame = null,
   name = 'Participant',
   role = 'participant',
   isAudioEnabled = false,
@@ -220,7 +221,18 @@ export const VideoTile = ({
       )}
 
       {/* Presenter connecting state or Avatar Fallback */}
-      {!hasActiveVideo && isPresenter ? (
+      {/* Fallback frame image from socket frame relay if video track has not started rendering yet */}
+      {frame && !hasActiveVideo && (
+        <img
+          src={frame}
+          alt={name}
+          className={`w-full h-full ${
+            isPresenter ? "object-contain" : "object-cover"
+          } absolute inset-0 z-0`}
+        />
+      )}
+
+      {!hasActiveVideo && !frame && isPresenter ? (
         <div className="flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200">
           <div className="w-16 h-16 rounded-2xl bg-neutral-900 border border-neutral-700 flex items-center justify-center text-white mb-3 shadow-lg">
             <Radio size={28} className="animate-pulse text-indigo-400" />
@@ -228,7 +240,7 @@ export const VideoTile = ({
           <span className="text-sm font-semibold text-neutral-200">{name}</span>
           <span className="text-xs text-neutral-400 mt-1">Connecting to screen share...</span>
         </div>
-      ) : !hasActiveVideo && (
+      ) : !hasActiveVideo && !frame && (
         <div className="flex flex-col items-center justify-center p-4">
           <div
             className={`w-20 h-20 rounded-full bg-neutral-900 border-2 flex items-center justify-center text-white text-2xl font-bold shadow-inner transition-all duration-200 ${

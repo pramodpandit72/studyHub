@@ -205,6 +205,28 @@ export const setupMeetingSocket = (io) => {
       io.to(roomId).emit('screen-share-stopped', { socketId: socket.id });
     });
 
+    // Screen share frame relay
+    socket.on('screen-share-frame', ({ roomId, frame }) => {
+      if (!roomId || !frame) return;
+      socket.to(roomId).emit('screen-share-frame', {
+        socketId: socket.id,
+        userId: socket.user?._id?.toString(),
+        name: socket.user?.name,
+        frame,
+      });
+    });
+
+    // Camera frame relay
+    socket.on('camera-frame', ({ roomId, frame }) => {
+      if (!roomId || !frame) return;
+      socket.to(roomId).emit('camera-frame', {
+        socketId: socket.id,
+        userId: socket.user?._id?.toString(),
+        name: socket.user?.name,
+        frame,
+      });
+    });
+
     // Host Controls: Mute Participant
     socket.on('mute-participant', ({ roomId, targetSocketId }) => {
       if (!verifyHost(roomId)) {

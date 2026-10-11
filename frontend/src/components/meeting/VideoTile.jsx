@@ -331,25 +331,15 @@ export const VideoTile = ({
         </div>
       )}
 
-      {/* Top Left: Badges */}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 z-20">
-        {isHost && (
-          <span className="px-2 py-0.5 text-[11px] font-semibold bg-white text-black rounded-md border border-white">
-            Host
-          </span>
-        )}
-        {isLocal && (
-          <span className="px-2 py-0.5 text-[11px] font-medium bg-neutral-900/90 text-white rounded-md border border-neutral-700">
-            You
-          </span>
-        )}
-        {isSpeaking && (
+      {/* Top Left: Only person name while speaking, nothing if not speaking */}
+      {isSpeaking && (
+        <div className="absolute top-3 left-3 flex items-center gap-1.5 z-20">
           <span className="px-2 py-0.5 text-[11px] font-semibold bg-emerald-500 text-white rounded-md flex items-center gap-1 shadow-xs animate-pulse">
             <Volume2 size={12} />
-            <span>Speaking</span>
+            <span>{name}</span>
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Bottom Bar: Name & Mic status */}
       <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20 pointer-events-none">

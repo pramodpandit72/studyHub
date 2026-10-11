@@ -48,6 +48,22 @@ export const MockTests = () => {
     fetchTestsAndAttempts();
   }, [selectedCategory]);
 
+  const formatAttemptDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+      return new Date(dateStr).toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return String(dateStr);
+    }
+  };
+
   const fetchTestsAndAttempts = async () => {
     try {
       setLoading(true);
@@ -392,18 +408,24 @@ export const MockTests = () => {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-4 text-xs text-text-secondary flex-wrap">
-                      <span className="flex items-center gap-1">
-                        <Calendar size={13} />
-                        {new Date(attempt.createdAt).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
+                    <div className="flex items-center gap-3 text-xs text-text-secondary flex-wrap pt-0.5">
+                      <span className="flex items-center gap-1.5 font-mono">
+                        <Calendar size={13} className="shrink-0 text-text-secondary" />
+                        <span className="text-text-secondary">Started:</span>
+                        <strong className="font-semibold text-text-primary">
+                          {formatAttemptDate(attempt.startedAt || attempt.createdAt)}
+                        </strong>
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Clock size={13} />
-                        {Math.floor((attempt.timeSpentSeconds || 0) / 60)}m {(attempt.timeSpentSeconds || 0) % 60}s spent
+                      <span className="flex items-center gap-1.5 font-mono">
+                        <CheckCircle2 size={13} className="shrink-0 text-text-secondary" />
+                        <span className="text-text-secondary">Submitted:</span>
+                        <strong className="font-semibold text-text-primary">
+                          {formatAttemptDate(attempt.submittedAt || attempt.createdAt)}
+                        </strong>
+                      </span>
+                      <span className="flex items-center gap-1 font-mono">
+                        <Clock size={13} className="shrink-0 text-text-secondary" />
+                        <span>{Math.floor((attempt.timeSpentSeconds || 0) / 60)}m {(attempt.timeSpentSeconds || 0) % 60}s</span>
                       </span>
                     </div>
                   </div>

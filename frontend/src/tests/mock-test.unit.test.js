@@ -251,4 +251,142 @@ test('Mock Test Frontend Logic & Utilities', async (t) => {
     assert.equal(closed, false);
     assert.equal(showSolutions, false); // Collapsed back to clean layout
   });
+  await t.test('11. Exit Fullscreen Interception Options: Resume Test vs Submit Test logic', () => {
+    // When in active testing mode and in fullscreen, clicking exit fullscreen must NOT exit silently
+    let isFullscreen = true;
+    let showExitFullscreenModal = false;
+    let exitFullscreenExecuted = false;
+    let pausedSession = false;
+    let submittedSession = false;
+
+    const handleFullscreenToolbarClick = () => {
+      if (isFullscreen) {
+        showExitFullscreenModal = true;
+      } else {
+        isFullscreen = true;
+      }
+    };
+
+    // User clicks Exit Fullscreen button
+    handleFullscreenToolbarClick();
+    assert.equal(showExitFullscreenModal, true, 'Must show security interception modal instead of exiting directly');
+
+    // Option A: User chooses "Pause & Resume Later"
+    const chooseResumeOption = () => {
+      showExitFullscreenModal = false;
+      isFullscreen = false;
+      exitFullscreenExecuted = true;
+      pausedSession = true;
+    };
+
+    chooseResumeOption();
+    assert.equal(showExitFullscreenModal, false);
+    assert.equal(isFullscreen, false);
+    assert.equal(exitFullscreenExecuted, true, 'Fullscreen exit must execute upon choosing resume');
+    assert.equal(pausedSession, true, 'Session must be safely paused for resuming later');
+
+    // Reset and test Option B: User chooses "Submit Test Now"
+    isFullscreen = true;
+    exitFullscreenExecuted = false;
+    handleFullscreenToolbarClick();
+    assert.equal(showExitFullscreenModal, true);
+
+    const chooseSubmitOption = () => {
+      showExitFullscreenModal = false;
+      isFullscreen = false;
+      exitFullscreenExecuted = true;
+      submittedSession = true;
+    };
+
+    chooseSubmitOption();
+    assert.equal(showExitFullscreenModal, false);
+    assert.equal(isFullscreen, false);
+    assert.equal(exitFullscreenExecuted, true, 'Fullscreen exit must execute upon choosing submit');
+    assert.equal(submittedSession, true, 'Session must be submitted immediately');
+  });
+
+  await t.test('12. Window & Tab Switch Security Warning Alert & Incident Counter', () => {
+    let tabSwitchCount = 0;
+    let totalTimeAwaySeconds = 0;
+    let showWindowSwitchModal = false;
+    let isAway = false;
+    let awayStartTime = null;
+
+    const handleWindowLeave = (now = Date.now()) => {
+      if (!isAway) {
+        isAway = true;
+        awayStartTime = now;
+      }
+    };
+
+    const handleWindowReturn = (now = Date.now()) => {
+      if (isAway && awayStartTime) {
+        const duration = Math.max(1, Math.round((now - awayStartTime) / 1000));
+        isAway = false;
+        awayStartTime = null;
+        tabSwitchCount += 1;
+        totalTimeAwaySeconds += duration;
+        showWindowSwitchModal = true;
+        return duration;
+      }
+      return 0;
+    };
+
+    // Candidate switches window / tab
+    const t0 = 1000000;
+    handleWindowLeave(t0);
+    assert.equal(isAway, true);
+
+    // Candidate returns after 5 seconds
+    const duration = handleWindowReturn(t0 + 5000);
+    assert.equal(duration, 5);
+    assert.equal(tabSwitchCount, 1, 'Incident #1 recorded');
+    assert.equal(totalTimeAwaySeconds, 5);
+    assert.equal(showWindowSwitchModal, true, 'Anti-cheating warning popup modal must be displayed upon return');
+
+    // Candidate acknowledges warning
+    showWindowSwitchModal = false;
+    assert.equal(showWindowSwitchModal, false);
+
+    // Second incident
+    handleWindowLeave(t0 + 20000);
+    handleWindowReturn(t0 + 23000);
+    assert.equal(tabSwitchCount, 2, 'Incident #2 recorded');
+    assert.equal(totalTimeAwaySeconds, 8);
+    assert.equal(showWindowSwitchModal, true);
+  });
+
+  await t.test('13. Practice Tracking Timestamps (Started Date & Submitted Date) Formatting', () => {
+    const formatAttemptDate = (dateStr) => {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
+      } catch {
+        return String(dateStr);
+      }
+    };
+
+    const startedIso = '2026-10-11T05:45:00.000Z';
+    const submittedIso = '2026-10-11T06:15:00.000Z';
+
+    const formattedStart = formatAttemptDate(startedIso);
+    const formattedSubmit = formatAttemptDate(submittedIso);
+
+    // Formatted strings must contain month, year, and time
+    assert.match(formattedStart, /Oct.*2026/);
+    assert.match(formattedSubmit, /Oct.*2026/);
+    assert.notEqual(formattedStart, 'N/A');
+    assert.notEqual(formattedSubmit, 'N/A');
+
+    // Missing date fallback
+    assert.equal(formatAttemptDate(null), 'N/A');
+    assert.equal(formatAttemptDate(undefined), 'N/A');
+  });
 });

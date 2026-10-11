@@ -115,45 +115,66 @@ export const MockTestAttempt = () => {
   useEffect(() => {
     if (mode !== 'testing' || result) return;
 
+    const handleWindowLeave = () => {
+      if (!isAwayRef.current) {
+        isAwayRef.current = true;
+        awayStartTimeRef.current = Date.now();
+        mockTestApi.recordSessionActivity(id, {
+          type: 'tab_hidden',
+          leftAt: new Date(awayStartTimeRef.current).toISOString(),
+          details: 'Test window lost focus or tab was switched / minimized',
+        }).catch(() => {});
+      }
+    };
+
+    const handleWindowReturn = () => {
+      if (isAwayRef.current && awayStartTimeRef.current) {
+        const returnedAt = Date.now();
+        const duration = Math.max(1, Math.round((returnedAt - awayStartTimeRef.current) / 1000));
+        const leftAtIso = new Date(awayStartTimeRef.current).toISOString();
+        isAwayRef.current = false;
+        awayStartTimeRef.current = null;
+
+        setLastAwayDuration(duration);
+        setShowAwayBanner(true);
+        setShowWindowSwitchModal(true);
+
+        mockTestApi.recordSessionActivity(id, {
+          type: 'tab_visible',
+          leftAt: leftAtIso,
+          returnedAt: new Date(returnedAt).toISOString(),
+          durationSeconds: duration,
+          details: `User returned to the test after ${duration} seconds away`,
+        }).then((res) => {
+          if (res.data?.data) {
+            setSessionMeta((prev) => {
+              const updatedCount = res.data.data.tabSwitchCount || prev.tabSwitchCount + 1;
+              setWindowSwitchIncident(updatedCount);
+              return {
+                ...prev,
+                tabSwitchCount: updatedCount,
+                totalTimeAwaySeconds: res.data.data.totalTimeAwaySeconds,
+              };
+            });
+          }
+        }).catch(() => {});
+      }
+    };
+
     const onVisibilityChange = () => {
       if (document.hidden) {
-        if (!isAwayRef.current) {
-          isAwayRef.current = true;
-          awayStartTimeRef.current = Date.now();
-          mockTestApi.recordSessionActivity(id, {
-            type: 'tab_hidden',
-            leftAt: new Date(awayStartTimeRef.current).toISOString(),
-            details: 'Test page became hidden (switched tab or minimized browser)',
-          }).catch(() => {});
-        }
+        handleWindowLeave();
       } else {
-        if (isAwayRef.current && awayStartTimeRef.current) {
-          const returnedAt = Date.now();
-          const duration = Math.max(1, Math.round((returnedAt - awayStartTimeRef.current) / 1000));
-          const leftAtIso = new Date(awayStartTimeRef.current).toISOString();
-          isAwayRef.current = false;
-          awayStartTimeRef.current = null;
-
-          setLastAwayDuration(duration);
-          setShowAwayBanner(true);
-
-          mockTestApi.recordSessionActivity(id, {
-            type: 'tab_visible',
-            leftAt: leftAtIso,
-            returnedAt: new Date(returnedAt).toISOString(),
-            durationSeconds: duration,
-            details: `User returned to the test after ${duration} seconds away`,
-          }).then((res) => {
-            if (res.data?.data) {
-              setSessionMeta((prev) => ({
-                ...prev,
-                tabSwitchCount: res.data.data.tabSwitchCount,
-                totalTimeAwaySeconds: res.data.data.totalTimeAwaySeconds,
-              }));
-            }
-          }).catch(() => {});
-        }
+        handleWindowReturn();
       }
+    };
+
+    const onWindowBlur = () => {
+      handleWindowLeave();
+    };
+
+    const onWindowFocus = () => {
+      handleWindowReturn();
     };
 
     const onFullscreenChange = () => {
@@ -167,6 +188,7 @@ export const MockTestAttempt = () => {
 
       if (!isFs) {
         setShowFullscreenWarning(true);
+        setShowExitFullscreenModal(true);
         mockTestApi.recordSessionActivity(id, {
           type: 'fullscreen_exit',
           leftAt: new Date().toISOString(),
@@ -181,6 +203,7 @@ export const MockTestAttempt = () => {
         }).catch(() => {});
       } else {
         setShowFullscreenWarning(false);
+        setShowExitFullscreenModal(false);
         mockTestApi.recordSessionActivity(id, {
           type: 'fullscreen_enter',
           leftAt: new Date().toISOString(),
@@ -190,11 +213,15 @@ export const MockTestAttempt = () => {
     };
 
     document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onWindowBlur);
+    window.addEventListener('focus', onWindowFocus);
     document.addEventListener('fullscreenchange', onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onWindowBlur);
+      window.removeEventListener('focus', onWindowFocus);
       document.removeEventListener('fullscreenchange', onFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
     };
@@ -492,7 +519,15 @@ export const MockTestAttempt = () => {
     if (!dateStr) return 'N/A';
     try {
       const d = new Date(dateStr);
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      return d.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      });
     } catch {
       return String(dateStr);
     }
@@ -932,9 +967,24 @@ export const MockTestAttempt = () => {
               <h1 className="text-xl sm:text-2xl font-bold text-text-primary">
                 {result.mockTestTitle || test.title}
               </h1>
-              <p className="text-xs text-text-secondary mt-1">
-                Started: {formatDateTime(result.startedAt || result.createdAt)} • Submitted: {formatDateTime(result.submittedAt || result.createdAt)}
-              </p>
+              <div className="flex flex-wrap items-center gap-2 mt-2 pt-0.5">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono bg-surface-100 dark:bg-surface-800 border border-border-color text-text-primary">
+                  <Calendar size={13} className="text-text-secondary" />
+                  <span className="text-text-secondary">Started:</span>
+                  <strong className="font-semibold">{formatDateTime(result.startedAt || result.createdAt)}</strong>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono bg-surface-100 dark:bg-surface-800 border border-border-color text-text-primary">
+                  <CheckCircle2 size={13} className="text-text-secondary" />
+                  <span className="text-text-secondary">Submitted:</span>
+                  <strong className="font-semibold">{formatDateTime(result.submittedAt || result.createdAt)}</strong>
+                </span>
+                {result.timeSpentSeconds !== undefined && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono bg-surface-100 dark:bg-surface-800 border border-border-color text-text-secondary">
+                    <Clock size={13} />
+                    <span>Practice Duration: {Math.floor(result.timeSpentSeconds / 60)}m {result.timeSpentSeconds % 60}s</span>
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="p-4 rounded-xl bg-surface-100 dark:bg-surface-800 border border-border-color text-center min-w-[150px]">
@@ -1383,7 +1433,13 @@ export const MockTestAttempt = () => {
           <button
             type="button"
             id="active-test-fullscreen-button"
-            onClick={toggleFullscreen}
+            onClick={() => {
+              if (isFullscreen) {
+                setShowExitFullscreenModal(true);
+              } else {
+                requestFullscreen();
+              }
+            }}
             className={`btn btn-sm flex items-center gap-1.5 touch-manipulation text-xs font-semibold ${
               isFullscreen
                 ? 'btn-secondary text-text-primary'
@@ -1898,6 +1954,174 @@ export const MockTestAttempt = () => {
               >
                 <RotateCcw size={14} />
                 <span>{isPausing ? 'Saving Progress...' : 'Pause & Save Session'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Exit Fullscreen Anti-Cheating Modal */}
+      {showExitFullscreenModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="card max-w-lg w-full p-6 space-y-5 border-neutral-500 shadow-2xl bg-surface-0 dark:bg-surface-900 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5 pb-3 border-b border-border-color">
+              <div className="p-2.5 rounded-xl bg-surface-100 dark:bg-surface-800 border border-border-color text-text-primary shrink-0">
+                <ShieldAlert size={24} />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-200 dark:bg-surface-700 text-text-primary border border-border-color">
+                  Anti-Cheating Security Guard
+                </span>
+                <h3 className="text-base sm:text-lg font-bold text-text-primary mt-1">
+                  Exit Fullscreen Request
+                </h3>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  To prevent cheating and maintain assessment integrity, please select how you wish to proceed before leaving fullscreen mode:
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {/* Option 1: Pause & Resume Test Later */}
+              <div className="p-4 rounded-xl border border-border-color bg-surface-50 dark:bg-surface-800/50 hover:border-neutral-400 transition space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
+                    <RotateCcw size={14} />
+                    Option 1: Pause & Resume Later
+                  </span>
+                  <span className="text-[11px] font-mono text-text-secondary">
+                    Resumes: {resumesRemaining}/4 left
+                  </span>
+                </div>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Your current answers ({attemptedCount}/{totalQuestions}) and remaining time ({formatTimer(timeLeft)}) will be safely saved to the server. Fullscreen will exit, and you can resume the test whenever you are ready.
+                </p>
+                <button
+                  type="button"
+                  id="exit-fs-resume-btn"
+                  onClick={async () => {
+                    setShowExitFullscreenModal(false);
+                    await exitFullscreen();
+                    await handlePauseAndSave();
+                  }}
+                  disabled={isPausing}
+                  className="btn btn-secondary btn-sm w-full justify-center flex items-center gap-1.5 font-semibold text-xs py-2 touch-manipulation"
+                >
+                  <RotateCcw size={13} />
+                  <span>{isPausing ? 'Saving Session...' : 'Pause Test & Exit Fullscreen'}</span>
+                </button>
+              </div>
+
+              {/* Option 2: Submit Test Now */}
+              <div className="p-4 rounded-xl border border-border-color bg-surface-50 dark:bg-surface-800/50 hover:border-neutral-400 transition space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
+                    <Send size={14} />
+                    Option 2: Submit Test Now
+                  </span>
+                  <span className="text-[11px] font-mono text-text-secondary">
+                    Final Submission
+                  </span>
+                </div>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Exit fullscreen and conclude the test immediately. All your selected answers will be evaluated and your detailed scorecard generated.
+                </p>
+                <button
+                  type="button"
+                  id="exit-fs-submit-btn"
+                  onClick={async () => {
+                    setShowExitFullscreenModal(false);
+                    await exitFullscreen();
+                    await submitTestInternal();
+                  }}
+                  disabled={isSubmitting}
+                  className="btn btn-primary btn-sm w-full justify-center flex items-center gap-1.5 font-semibold text-xs py-2 touch-manipulation"
+                >
+                  <CheckCircle2 size={13} />
+                  <span>{isSubmitting ? 'Submitting...' : 'Submit Test & Exit Fullscreen'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border-color flex items-center justify-between">
+              <span className="text-[11px] text-text-secondary">
+                Clicked by mistake?
+              </span>
+              <button
+                type="button"
+                id="exit-fs-cancel-btn"
+                onClick={async () => {
+                  setShowExitFullscreenModal(false);
+                  if (!isFullscreen) {
+                    await requestFullscreen();
+                  }
+                }}
+                className="btn btn-secondary btn-sm text-xs font-semibold px-4 touch-manipulation"
+              >
+                Stay in Fullscreen & Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Window Switch Anti-Cheating Warning Modal */}
+      {showWindowSwitchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="card max-w-md w-full p-6 space-y-4 border-neutral-500 shadow-2xl bg-surface-0 dark:bg-surface-900 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-surface-200 dark:bg-surface-700 border border-neutral-500 text-text-primary shrink-0">
+                <ShieldAlert size={26} />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color">
+                  Anti-Cheating Security Alert
+                </span>
+                <h3 className="text-base font-bold text-text-primary mt-1">
+                  Window Switch Warning
+                </h3>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-lg bg-surface-50 dark:bg-surface-800/60 border border-border-color text-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-text-secondary">Switch Event:</span>
+                <span className="font-mono font-bold text-text-primary">
+                  Incident #{windowSwitchIncident || sessionMeta.tabSwitchCount || 1}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-text-secondary">Time Spent Away:</span>
+                <span className="font-mono font-bold text-text-primary">
+                  {lastAwayDuration} second{lastAwayDuration === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-text-secondary">Total Suspicious Away Time:</span>
+                <span className="font-mono font-bold text-text-primary">
+                  {sessionMeta.totalTimeAwaySeconds}s
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Switching windows, opening other applications, or changing browser tabs is strictly monitored to prevent unauthorized aids. This event has been logged in your assessment integrity audit.
+            </p>
+
+            <div className="pt-2 border-t border-border-color flex justify-end">
+              <button
+                type="button"
+                id="acknowledge-window-switch-btn"
+                onClick={async () => {
+                  setShowWindowSwitchModal(false);
+                  if (!isFullscreen) {
+                    await requestFullscreen().catch(() => {});
+                  }
+                }}
+                className="btn btn-primary btn-sm flex items-center gap-1.5 text-xs font-semibold px-4 min-h-[38px] touch-manipulation"
+              >
+                <CheckCircle2 size={14} />
+                <span>I Understand & Return to Test</span>
               </button>
             </div>
           </div>

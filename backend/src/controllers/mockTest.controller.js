@@ -1,6 +1,7 @@
 import MockTest from '../models/MockTest.js';
 import MockTestAttempt from '../models/MockTestAttempt.js';
 import { mockTestsSeedData } from '../seeds/mockTest.seed.js';
+import { rrbMockTestData } from '../seeds/rrbMockTest.data.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 
 // Auto-seed mock tests if collection is empty
@@ -9,7 +10,12 @@ const ensureMockTestsSeeded = async () => {
     const count = await MockTest.countDocuments();
     if (count === 0) {
       await MockTest.insertMany(mockTestsSeedData);
-      console.log('Auto-seeded initial mock tests collection with 6 tests.');
+      console.log('Auto-seeded initial mock tests collection.');
+    }
+    const rrbExists = await MockTest.findOne({ title: /RRB.*TCS.*Style/i });
+    if (!rrbExists) {
+      await MockTest.create(rrbMockTestData);
+      console.log('Auto-seeded RRB TCS Style Full Mock Test.');
     }
   } catch (error) {
     console.error('Failed to auto-seed mock tests:', error);

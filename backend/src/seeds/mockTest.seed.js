@@ -1,4 +1,7 @@
+import { rrbMockTestData } from './rrbMockTest.data.js';
+
 export const mockTestsSeedData = [
+  rrbMockTestData,
   {
     "title": "SSC CGL Tier-1 Full Practice Mock Test",
     "category": "SSC",

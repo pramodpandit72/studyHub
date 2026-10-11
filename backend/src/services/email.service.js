@@ -1,5 +1,19 @@
 import env from '../config/env.js';
 
+// Reserved RFC 2606 / RFC 6761 test/example domains that cannot receive email (Null MX)
+const FICTITIOUS_DOMAIN_REGEX = /@(example\.(com|org|net)|test\.(com|org|net)|invalid|localhost|dummy\.(com|org|net)|fake\.(com|org|net))$/i;
+
+/**
+ * Check whether email should be simulated locally without dispatching to external EmailJS API
+ * - In test environment (NODE_ENV === 'test')
+ * - When target email is a fictitious/example domain (e.g., @example.com) to prevent mailer-daemon bounce-back emails
+ */
+const shouldSimulateEmail = (email) => {
+  if (!email || typeof email !== 'string') return true;
+  if (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test') return true;
+  return FICTITIOUS_DOMAIN_REGEX.test(email.trim().toLowerCase());
+};
+
 const emailService = {
   /**
    * Send account verification OTP email for signup
@@ -16,6 +30,12 @@ const emailService = {
 
     if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
       console.log(`[EMAIL DEV LOG] Signup verification OTP for ${toEmail}: ${otp}`);
+    }
+
+    // Suppress external EmailJS call for test suites or fictitious/example domains
+    if (shouldSimulateEmail(toEmail)) {
+      console.log(`[EMAIL SERVICE] Simulated signup verification OTP for ${toEmail}: ${otp} (External dispatch suppressed)`);
+      return { sent: true, simulated: true };
     }
 
     if (!serviceId || !templateId || !publicKey) {
@@ -83,6 +103,12 @@ const emailService = {
 
     if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
       console.log(`[EMAIL DEV LOG] Password reset code for ${toEmail}: ${resetCode}`);
+    }
+
+    // Suppress external EmailJS call for test suites or fictitious/example domains
+    if (shouldSimulateEmail(toEmail)) {
+      console.log(`[EMAIL SERVICE] Simulated password reset code for ${toEmail}: ${resetCode} (External dispatch suppressed)`);
+      return { sent: true, simulated: true };
     }
 
     if (!serviceId || !templateId || !publicKey) {

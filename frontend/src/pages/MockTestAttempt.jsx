@@ -235,17 +235,40 @@ export const MockTestAttempt = () => {
     }
   };
 
+  const exitFullscreen = async () => {
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+        else if (document.mozCancelFullScreen) await document.mozCancelFullScreen();
+        else if (document.msExitFullscreen) await document.msExitFullscreen();
+      }
+      setIsFullscreen(false);
+    } catch (err) {
+      console.warn('Exit fullscreen error:', err);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (isFullscreen) {
+      exitFullscreen();
+    } else {
+      requestFullscreen();
+    }
+  };
+
   const handleStartTest = async () => {
     if (!acknowledgedInstructions) {
       warning('Please read and confirm the candidate declaration before proceeding.');
       return;
     }
 
+    if (enableFullscreenPref) {
+      requestFullscreen().catch(() => {});
+    }
+
     try {
       setIsSubmitting(true);
-      if (enableFullscreenPref) {
-        await requestFullscreen();
-      }
 
       const res = await mockTestApi.startSession(id);
       const session = res.data.data.session;
@@ -590,7 +613,13 @@ export const MockTestAttempt = () => {
               className="btn btn-primary btn-sm w-full sm:w-auto flex items-center justify-center gap-2 disabled:opacity-40"
             >
               <Maximize2 size={15} />
-              <span>{isSubmitting ? 'Starting Session...' : 'Start Exam (Timer Will Begin)'}</span>
+              <span>
+                {isSubmitting
+                  ? 'Starting Session...'
+                  : enableFullscreenPref
+                  ? 'Enable Fullscreen & Start Test'
+                  : 'Start Test'}
+              </span>
             </button>
           </div>
         </div>
@@ -1142,6 +1171,22 @@ export const MockTestAttempt = () => {
         </div>
 
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+          {/* Prominent Fullscreen Mode Button */}
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className={`btn btn-sm flex items-center gap-1.5 touch-manipulation text-xs font-semibold ${
+              isFullscreen
+                ? 'btn-secondary text-text-primary'
+                : 'bg-neutral-800 text-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 border-text-primary shadow-sm'
+            }`}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enable Fullscreen Mode'}
+          >
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            <span className="hidden sm:inline">{isFullscreen ? 'Exit Fullscreen' : 'Enable Fullscreen'}</span>
+            <span className="sm:hidden">{isFullscreen ? 'Exit FS' : 'Fullscreen'}</span>
+          </button>
+
           <button
             onClick={() => setShowMobilePalette(true)}
             className="lg:hidden btn btn-secondary btn-sm flex items-center gap-1.5 font-mono text-xs touch-manipulation px-2.5 py-1.5"

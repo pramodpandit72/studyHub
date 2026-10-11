@@ -26,6 +26,8 @@ import {
   EyeOff,
   Eye,
   FileText,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react';
 
 export const MockTestAttempt = () => {
@@ -39,8 +41,11 @@ export const MockTestAttempt = () => {
   const [test, setTest] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
   const [acknowledgedInstructions, setAcknowledgedInstructions] = useState(false);
+  const [enableFullscreenPref, setEnableFullscreenPref] = useState(true);
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [markedForReview, setMarkedForReview] = useState(new Set());
+  const [paletteFilter, setPaletteFilter] = useState('all');
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -232,13 +237,15 @@ export const MockTestAttempt = () => {
 
   const handleStartTest = async () => {
     if (!acknowledgedInstructions) {
-      warning('Please read and confirm the instructions checkbox before proceeding.');
+      warning('Please read and confirm the candidate declaration before proceeding.');
       return;
     }
 
     try {
       setIsSubmitting(true);
-      await requestFullscreen();
+      if (enableFullscreenPref) {
+        await requestFullscreen();
+      }
 
       const res = await mockTestApi.startSession(id);
       const session = res.data.data.session;
@@ -387,9 +394,29 @@ export const MockTestAttempt = () => {
     }
   };
 
+  const toggleMarkForReview = (qIdx) => {
+    setMarkedForReview((prev) => {
+      const next = new Set(prev);
+      if (next.has(qIdx)) {
+        next.delete(qIdx);
+      } else {
+        next.add(qIdx);
+      }
+      return next;
+    });
+  };
+
+  const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins === 0) return `${secs}s`;
+    return `${mins}m ${secs}s`;
+  };
+
   const attemptedCount = Object.keys(selectedAnswers).length;
   const totalQuestions = test?.questions?.length || 0;
   const unattemptedCount = Math.max(0, totalQuestions - attemptedCount);
+  const markedCount = markedForReview.size;
 
   const submitTestInternal = async () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -418,6 +445,7 @@ export const MockTestAttempt = () => {
     setResult(null);
     setMode('instructions');
     setAcknowledgedInstructions(false);
+    setMarkedForReview(new Set());
   };
 
   if (mode === 'loading') return <PageLoader />;
@@ -492,37 +520,58 @@ export const MockTestAttempt = () => {
 
             <ul className="space-y-2.5 list-disc pl-5">
               <li>
-                <strong className="text-text-primary">Countdown Timer:</strong> The examination timer will start immediately once you click <span className="font-semibold text-text-primary">"Enable Fullscreen & Start Test"</span>. The test auto-submits when time expires.
+                <strong className="text-text-primary">Official Timer:</strong> The countdown timer will start <strong>only after you click "Start Exam"</strong> below. The timer does NOT run while viewing instructions.
               </li>
               <li>
-                <strong className="text-text-primary">Navigation & Palette:</strong> You can navigate freely between questions using the Question Palette or the Next/Previous controls. You may change your chosen answer at any time prior to final submission.
+                <strong className="text-text-primary">Answering & Mark for Review:</strong> You can choose an option, clear your choice, or click <strong className="text-text-primary">"Mark for Review"</strong> to flag uncertain questions for later inspection. Questions with an answer selected will still be evaluated even if marked for review.
               </li>
               <li>
-                <strong className="text-text-primary">Fullscreen Requirement:</strong> You will be prompted to enter fullscreen mode upon starting. A visible status banner will monitor fullscreen state throughout the test.
+                <strong className="text-text-primary">Navigation & Palette:</strong> Navigate freely using the Question Palette or Next/Prev buttons. The Question Palette displays counts and filters for Answered, Unanswered, and Marked questions.
               </li>
               <li>
-                <strong className="text-text-primary">Activity & Tab-Switch Monitoring:</strong> Window minimization, tab switching, and leaving the test page are tracked as objective session activity indicators. (Note: System records events for assessment integrity; ordinary browser interactions are logged without falsely declaring misconduct).
+                <strong className="text-text-primary">Fullscreen Requirement:</strong> You can enable fullscreen mode to maintain test focus. An exit warning and re-entry button appear if fullscreen is interrupted.
               </li>
               <li>
-                <strong className="text-text-primary">Session Resume Policy (Max 4 Attempts):</strong> If you encounter a network disconnection or refresh your browser, your answers and remaining time are preserved. You are allowed up to a maximum of <strong className="text-text-primary">4 successful resume attempts</strong> per test session.
+                <strong className="text-text-primary">Activity & Tab-Switch Monitoring:</strong> Window minimization and tab switching are tracked as objective activity indicators and logged in the session audit timeline.
               </li>
               <li>
-                <strong className="text-text-primary">Submission:</strong> Review all answered questions using the Question Palette before clicking <span className="font-semibold text-text-primary">"Submit Test"</span>. Once submitted, your scorecard and answer key analysis will be evaluated instantly.
+                <strong className="text-text-primary">Session Resume Policy (Max 4 Attempts):</strong> In case of accidental disconnection or browser refresh, your progress is saved. You are allowed up to a maximum of <strong className="text-text-primary">4 successful resume attempts</strong>.
               </li>
             </ul>
           </div>
 
-          <div className="p-4 rounded-xl bg-surface-100 dark:bg-surface-800 border border-border-color flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="acknowledgeInstructions"
-              checked={acknowledgedInstructions}
-              onChange={(e) => setAcknowledgedInstructions(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-border-color text-text-primary focus:ring-0 cursor-pointer"
-            />
-            <label htmlFor="acknowledgeInstructions" className="text-xs text-text-primary cursor-pointer select-none leading-relaxed">
-              <strong>I have read and understood the test instructions and guidelines.</strong> I agree to enter fullscreen mode and abide by the session monitoring and resume policies.
-            </label>
+          <div className="p-4 rounded-xl bg-surface-100 dark:bg-surface-800 border border-border-color space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
+              <CheckCircle2 size={15} /> Candidate Declaration & Undertaking
+            </h4>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              I hereby declare that I am appearing for this examination under fair conditions. I understand that my tab-switch activity, focus transitions, and fullscreen status will be recorded in the session audit timeline.
+            </p>
+
+            <div className="space-y-2.5 pt-1 border-t border-border-color/60">
+              <label className="flex items-center gap-2.5 text-xs text-text-primary cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={enableFullscreenPref}
+                  onChange={(e) => setEnableFullscreenPref(e.target.checked)}
+                  className="w-4 h-4 rounded border-border-color text-text-primary focus:ring-0 cursor-pointer"
+                />
+                <span><strong>Enable Fullscreen Mode upon starting exam</strong> (Recommended for testing integrity)</span>
+              </label>
+
+              <label className="flex items-start gap-2.5 text-xs text-text-primary cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  id="acknowledgeInstructions"
+                  checked={acknowledgedInstructions}
+                  onChange={(e) => setAcknowledgedInstructions(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-border-color text-text-primary focus:ring-0 cursor-pointer"
+                />
+                <span>
+                  <strong>I have read, understood, and agree to the examination rules and candidate declaration.</strong> (The test timer will start only when you click Start Exam below).
+                </span>
+              </label>
+            </div>
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2">
@@ -541,7 +590,7 @@ export const MockTestAttempt = () => {
               className="btn btn-primary btn-sm w-full sm:w-auto flex items-center justify-center gap-2 disabled:opacity-40"
             >
               <Maximize2 size={15} />
-              <span>{isSubmitting ? 'Starting Session...' : 'Enable Fullscreen & Start Test'}</span>
+              <span>{isSubmitting ? 'Starting Session...' : 'Start Exam (Timer Will Begin)'}</span>
             </button>
           </div>
         </div>
@@ -1001,6 +1050,17 @@ export const MockTestAttempt = () => {
   const resumesUsed = sessionMeta.resumeCount || 0;
   const maxResumes = sessionMeta.maxResumesAllowed || 4;
   const resumesRemaining = Math.max(0, maxResumes - resumesUsed);
+  const isCurrentMarked = markedForReview.has(currentIndex);
+
+  const filteredPaletteQuestions = (test.questions || []).map((q, idx) => ({ q, idx })).filter(({ idx }) => {
+    const isAnswered = selectedAnswers[idx] !== undefined;
+    const isMarked = markedForReview.has(idx);
+
+    if (paletteFilter === 'answered') return isAnswered;
+    if (paletteFilter === 'unanswered') return !isAnswered;
+    if (paletteFilter === 'marked') return isMarked;
+    return true;
+  });
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 w-full space-y-4 sm:space-y-5 pb-24 lg:pb-6">
@@ -1067,6 +1127,13 @@ export const MockTestAttempt = () => {
             <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-surface-50 dark:bg-surface-800 text-text-secondary border border-border-color">
               Resumes: {resumesRemaining}/4
             </span>
+
+            {markedCount > 0 && (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-surface-200 dark:bg-surface-700 text-text-primary border border-border-color flex items-center gap-1">
+                <Bookmark size={11} className="fill-current" />
+                {markedCount} Marked
+              </span>
+            )}
           </div>
 
           <h1 className="text-sm sm:text-base font-bold text-text-primary mt-1 truncate">
@@ -1110,19 +1177,43 @@ export const MockTestAttempt = () => {
         <div className="lg:col-span-3 space-y-4">
           <div className="card p-5 sm:p-6 space-y-6 min-h-[360px] flex flex-col justify-between">
             <div className="space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-border-color">
-                <span className="text-xs sm:text-sm font-bold text-text-primary font-mono">
-                  Question {currentIndex + 1} of {test.questions?.length}
-                </span>
+              <div className="flex items-center justify-between pb-3 border-b border-border-color flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs sm:text-sm font-bold text-text-primary font-mono">
+                    Question {currentIndex + 1} of {test.questions?.length}
+                  </span>
+                  {isCurrentMarked && (
+                    <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-200 dark:bg-surface-700 text-text-primary border border-border-color flex items-center gap-1">
+                      <Bookmark size={10} className="fill-current" />
+                      Marked for Review
+                    </span>
+                  )}
+                </div>
 
-                {selectedAnswers[currentIndex] !== undefined && (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={handleClearAnswer}
-                    className="text-xs text-text-secondary hover:text-text-primary underline transition touch-manipulation"
+                    type="button"
+                    onClick={() => toggleMarkForReview(currentIndex)}
+                    className={`btn btn-sm text-xs flex items-center gap-1.5 touch-manipulation transition ${
+                      isCurrentMarked
+                        ? 'bg-neutral-800 text-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 font-bold border-text-primary'
+                        : 'btn-secondary text-text-secondary hover:text-text-primary'
+                    }`}
+                    title="Toggle Mark for Review"
                   >
-                    Clear Choice
+                    <Bookmark size={13} className={isCurrentMarked ? 'fill-current' : ''} />
+                    <span>{isCurrentMarked ? 'Marked' : 'Mark for Review'}</span>
                   </button>
-                )}
+
+                  {selectedAnswers[currentIndex] !== undefined && (
+                    <button
+                      onClick={handleClearAnswer}
+                      className="text-xs text-text-secondary hover:text-text-primary underline transition touch-manipulation ml-1"
+                    >
+                      Clear Choice
+                    </button>
+                  )}
+                </div>
               </div>
 
               <h2 className="text-base sm:text-lg font-medium text-text-primary leading-relaxed">
@@ -1171,6 +1262,23 @@ export const MockTestAttempt = () => {
               </button>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!markedForReview.has(currentIndex)) {
+                      toggleMarkForReview(currentIndex);
+                    }
+                    if (!isLastQuestion) {
+                      setCurrentIndex((prev) => prev + 1);
+                    }
+                  }}
+                  className="btn btn-secondary btn-sm flex items-center gap-1.5 touch-manipulation"
+                  title="Mark this question and proceed to next"
+                >
+                  <Bookmark size={13} />
+                  <span>Mark & Next</span>
+                </button>
+
                 {isLastQuestion ? (
                   <button
                     onClick={() => setShowConfirmModal(true)}
@@ -1212,17 +1320,71 @@ export const MockTestAttempt = () => {
               <span className="w-3 h-3 rounded border border-border-color bg-surface-100 dark:bg-surface-800 shrink-0" />
               <span>Unanswered ({unattemptedCount})</span>
             </div>
+            <div className="flex items-center gap-1.5 col-span-2 pt-0.5">
+              <span className="w-3 h-3 rounded bg-surface-200 dark:bg-surface-700 border border-neutral-400 flex items-center justify-center shrink-0">
+                <Bookmark size={8} className="fill-current text-text-primary" />
+              </span>
+              <span>Marked for Review ({markedCount})</span>
+            </div>
           </div>
 
-          <div className="max-h-[380px] overflow-y-auto overscroll-contain pr-1 custom-scrollbar">
+          <div className="grid grid-cols-4 gap-1 p-1 rounded-lg bg-surface-100 dark:bg-surface-800 border border-border-color text-[10px]">
+            <button
+              onClick={() => setPaletteFilter('all')}
+              className={`py-1 rounded font-medium transition ${
+                paletteFilter === 'all'
+                  ? 'bg-text-primary text-surface-50 font-bold'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setPaletteFilter('answered')}
+              className={`py-1 rounded font-medium transition ${
+                paletteFilter === 'answered'
+                  ? 'bg-text-primary text-surface-50 font-bold'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Ans
+            </button>
+            <button
+              onClick={() => setPaletteFilter('unanswered')}
+              className={`py-1 rounded font-medium transition ${
+                paletteFilter === 'unanswered'
+                  ? 'bg-text-primary text-surface-50 font-bold'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Unans
+            </button>
+            <button
+              onClick={() => setPaletteFilter('marked')}
+              className={`py-1 rounded font-medium transition ${
+                paletteFilter === 'marked'
+                  ? 'bg-text-primary text-surface-50 font-bold'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Marked
+            </button>
+          </div>
+
+          <div className="max-h-[350px] overflow-y-auto overscroll-contain pr-1 custom-scrollbar">
             <div className="grid grid-cols-5 gap-2 pt-1">
-              {test.questions?.map((_, qIdx) => {
+              {filteredPaletteQuestions.map(({ idx: qIdx }) => {
                 const isAnswered = selectedAnswers[qIdx] !== undefined;
+                const isMarked = markedForReview.has(qIdx);
                 const isCurrent = currentIndex === qIdx;
 
                 let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
-                if (isAnswered) {
+                if (isAnswered && isMarked) {
                   style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
+                } else if (isAnswered) {
+                  style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
+                } else if (isMarked) {
+                  style = 'bg-surface-200 dark:bg-surface-700 text-text-primary border-neutral-400 font-bold';
                 }
                 if (isCurrent) {
                   style += ' ring-2 ring-neutral-400 dark:ring-neutral-200';
@@ -1233,9 +1395,12 @@ export const MockTestAttempt = () => {
                     key={qIdx}
                     type="button"
                     onClick={() => setCurrentIndex(qIdx)}
-                    className={`h-9 rounded-lg border font-mono text-xs transition flex items-center justify-center touch-manipulation active:scale-95 ${style}`}
+                    className={`h-9 rounded-lg border font-mono text-xs transition flex items-center justify-center relative touch-manipulation active:scale-95 ${style}`}
                   >
-                    {qIdx + 1}
+                    <span>{qIdx + 1}</span>
+                    {isMarked && (
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-900 border border-neutral-400" />
+                    )}
                   </button>
                 );
               })}
@@ -1253,11 +1418,11 @@ export const MockTestAttempt = () => {
         </div>
       </div>
 
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface-0/95 dark:bg-surface-900/95 backdrop-blur-md border-t border-border-color px-4 py-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg flex items-center justify-between gap-2.5">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface-0/95 dark:bg-surface-900/95 backdrop-blur-md border-t border-border-color px-4 py-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg flex items-center justify-between gap-2">
         <button
           onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
           disabled={currentIndex === 0}
-          className="btn btn-secondary btn-sm flex items-center gap-1.5 disabled:opacity-30 touch-manipulation min-h-[42px] px-3.5"
+          className="btn btn-secondary btn-sm flex items-center gap-1.5 disabled:opacity-30 touch-manipulation min-h-[42px] px-3"
           aria-label="Previous question"
         >
           <ArrowLeft size={16} />
@@ -1265,8 +1430,21 @@ export const MockTestAttempt = () => {
         </button>
 
         <button
+          type="button"
+          onClick={() => toggleMarkForReview(currentIndex)}
+          className={`btn btn-sm min-h-[42px] px-3 touch-manipulation flex items-center gap-1.5 text-xs ${
+            isCurrentMarked
+              ? 'bg-neutral-800 text-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 font-bold border-text-primary'
+              : 'btn-secondary text-text-secondary'
+          }`}
+        >
+          <Bookmark size={14} className={isCurrentMarked ? 'fill-current' : ''} />
+          <span>{isCurrentMarked ? 'Marked' : 'Mark'}</span>
+        </button>
+
+        <button
           onClick={() => setShowMobilePalette(true)}
-          className="btn btn-secondary btn-sm flex items-center gap-1.5 font-mono text-xs touch-manipulation min-h-[42px] px-3"
+          className="btn btn-secondary btn-sm flex items-center gap-1.5 font-mono text-xs touch-manipulation min-h-[42px] px-2.5"
           aria-label="Open question palette"
         >
           <LayoutGrid size={15} />
@@ -1316,14 +1494,20 @@ export const MockTestAttempt = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs text-text-secondary py-1">
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded bg-text-primary shrink-0" />
-                <span>Answered ({attemptedCount})</span>
+            <div className="grid grid-cols-3 gap-2 text-xs text-text-secondary py-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded bg-text-primary shrink-0" />
+                <span>Ans ({attemptedCount})</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded border border-border-color bg-surface-100 dark:bg-surface-800 shrink-0" />
-                <span>Unanswered ({unattemptedCount})</span>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded border border-border-color bg-surface-100 dark:bg-surface-800 shrink-0" />
+                <span>Unans ({unattemptedCount})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded bg-surface-200 dark:bg-surface-700 border border-neutral-400 flex items-center justify-center shrink-0">
+                  <Bookmark size={7} className="fill-current text-text-primary" />
+                </span>
+                <span>Marked ({markedCount})</span>
               </div>
             </div>
 
@@ -1331,11 +1515,16 @@ export const MockTestAttempt = () => {
               <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
                 {test.questions?.map((_, qIdx) => {
                   const isAnswered = selectedAnswers[qIdx] !== undefined;
+                  const isMarked = markedForReview.has(qIdx);
                   const isCurrent = currentIndex === qIdx;
 
                   let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
-                  if (isAnswered) {
+                  if (isAnswered && isMarked) {
                     style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
+                  } else if (isAnswered) {
+                    style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
+                  } else if (isMarked) {
+                    style = 'bg-surface-200 dark:bg-surface-700 text-text-primary border-neutral-400 font-bold';
                   }
                   if (isCurrent) {
                     style += ' ring-2 ring-neutral-400 dark:ring-neutral-200';
@@ -1349,9 +1538,12 @@ export const MockTestAttempt = () => {
                         setCurrentIndex(qIdx);
                         setShowMobilePalette(false);
                       }}
-                      className={`h-11 rounded-lg border font-mono text-xs font-semibold transition flex items-center justify-center touch-manipulation active:scale-95 ${style}`}
+                      className={`h-11 rounded-lg border font-mono text-xs font-semibold transition flex items-center justify-center relative touch-manipulation active:scale-95 ${style}`}
                     >
-                      {qIdx + 1}
+                      <span>{qIdx + 1}</span>
+                      {isMarked && (
+                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-900 border border-neutral-400" />
+                      )}
                     </button>
                   );
                 })}
@@ -1407,11 +1599,19 @@ export const MockTestAttempt = () => {
                 <span>Unattempted Questions:</span>
                 <span className="font-mono font-bold text-text-primary">{unattemptedCount}</span>
               </div>
+              <div className="flex justify-between text-text-secondary">
+                <span>Marked for Review:</span>
+                <span className="font-mono font-bold text-text-primary">{markedCount}</span>
+              </div>
               <div className="flex justify-between text-text-secondary border-t border-border-color pt-1.5">
                 <span>Time Remaining:</span>
                 <span className="font-mono font-bold text-text-primary">{formatTimer(timeLeft)}</span>
               </div>
             </div>
+
+            <p className="text-[11px] text-text-secondary italic">
+              Note: Questions marked for review will be evaluated if you have selected an answer.
+            </p>
 
             <div className="flex items-center justify-end gap-2.5 pt-1">
               <button

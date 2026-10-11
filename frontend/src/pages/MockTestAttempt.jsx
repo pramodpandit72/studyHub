@@ -28,6 +28,8 @@ import {
   FileText,
   Bookmark,
   BookmarkCheck,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 export const MockTestAttempt = () => {
@@ -55,6 +57,7 @@ export const MockTestAttempt = () => {
   const [isPausing, setIsPausing] = useState(false);
   const [showMobilePalette, setShowMobilePalette] = useState(false);
   const [reviewFilter, setReviewFilter] = useState('all');
+  const [showSolutions, setShowSolutions] = useState(false);
   const [result, setResult] = useState(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1007,8 +1010,25 @@ export const MockTestAttempt = () => {
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <button
+              type="button"
+              id="review-answers-solutions-btn"
+              onClick={() => {
+                setShowSolutions((prev) => !prev);
+                if (!showSolutions) {
+                  setTimeout(() => {
+                    document.getElementById('solutions-review-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 50);
+                }
+              }}
+              className="btn btn-primary btn-sm flex items-center gap-1.5 touch-manipulation font-semibold shadow-sm"
+            >
+              <BookOpen size={14} />
+              <span>{showSolutions ? 'Hide Detailed Solutions' : 'Review Your Answers & Solutions'}</span>
+              {showSolutions ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            <button
               onClick={handleRetake}
-              className="btn btn-primary btn-sm flex items-center gap-1.5 touch-manipulation"
+              className="btn btn-secondary btn-sm flex items-center gap-1.5 touch-manipulation"
             >
               <RotateCcw size={14} />
               <span>Retake Test</span>
@@ -1087,17 +1107,55 @@ export const MockTestAttempt = () => {
         </div>
 
         {/* Question Review Section */}
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+        <div id="solutions-review-section" className="space-y-4">
+          {!showSolutions ? (
+            <div className="card p-6 sm:p-7 text-center border-dashed border-border-color space-y-3 bg-surface-50 dark:bg-surface-800/30">
+              <div className="w-11 h-11 mx-auto rounded-full bg-surface-100 dark:bg-surface-800 flex items-center justify-center text-text-primary border border-border-color">
                 <BookOpen size={18} />
-                Question & Answer Key Review ({result.answers?.length || 0})
-              </h2>
-              <p className="text-xs text-text-secondary mt-0.5">
-                Review correct options, technical reasoning, and detailed explanations
-              </p>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm sm:text-base font-bold text-text-primary">
+                  Review Your Answers & Detailed Solutions
+                </h3>
+                <p className="text-xs text-text-secondary max-w-lg mx-auto leading-relaxed">
+                  Verify your choices against official answer keys, correct responses, and technical explanations for all {result.answers?.length || 0} questions.
+                </p>
+              </div>
+              <div className="pt-1.5">
+                <button
+                  type="button"
+                  id="expand-solutions-btn"
+                  onClick={() => setShowSolutions(true)}
+                  className="btn btn-primary btn-sm inline-flex items-center gap-2 shadow-sm font-semibold"
+                >
+                  <BookOpen size={14} />
+                  <span>Review Answers & Solutions ({result.answers?.length || 0} Questions)</span>
+                  <ChevronDown size={14} />
+                </button>
+              </div>
             </div>
+          ) : (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+                      <BookOpen size={18} />
+                      Question & Answer Key Review ({result.answers?.length || 0})
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setShowSolutions(false)}
+                      className="text-xs text-text-secondary hover:text-text-primary underline flex items-center gap-1 font-medium"
+                    >
+                      <ChevronUp size={13} />
+                      Hide Solutions
+                    </button>
+                  </div>
+                  <p className="text-xs text-text-secondary mt-0.5">
+                    Review correct options, technical reasoning, and detailed explanations
+                  </p>
+                </div>
 
             <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-lg bg-surface-100 dark:bg-surface-800 border border-border-color">
               {[
@@ -1212,6 +1270,8 @@ export const MockTestAttempt = () => {
                   </div>
                 );
               })}
+            </div>
+          )}
             </div>
           )}
         </div>

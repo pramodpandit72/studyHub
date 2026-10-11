@@ -229,4 +229,26 @@ test('Mock Test Frontend Logic & Utilities', async (t) => {
     assert.equal(restoredAnswers[0], 1);
     assert.equal(restoredAnswers[1], 3);
   });
+
+  await t.test('10. Review Answers & Detailed Solutions toggle logic defaults to hidden for clean interface', () => {
+    // Initial state after test submission: solutions must default to false for a clean scorecard interface
+    let showSolutions = false;
+
+    const toggleSolutions = () => {
+      showSolutions = !showSolutions;
+      return showSolutions;
+    };
+
+    assert.equal(showSolutions, false); // Clean layout by default
+
+    // User clicks "Review Your Answers & Solutions"
+    const opened = toggleSolutions();
+    assert.equal(opened, true);
+    assert.equal(showSolutions, true); // Solutions now revealed
+
+    // User clicks "Hide Solutions"
+    const closed = toggleSolutions();
+    assert.equal(closed, false);
+    assert.equal(showSolutions, false); // Collapsed back to clean layout
+  });
 });

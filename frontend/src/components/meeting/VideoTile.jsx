@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+﻿import { useRef, useEffect, useState } from 'react';
 import { Mic, MicOff, User, Volume2, Radio } from 'lucide-react';
 
 export const VideoTile = ({
@@ -12,14 +12,15 @@ export const VideoTile = ({
   isHost = false,
 }) => {
   const videoRef = useRef(null);
-  const audioRef = useRef(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [videoTrackCount, setVideoTrackCount] = useState(0);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
   // Dynamically track live, unmuted video tracks on stream
   useEffect(() => {
     if (!stream) {
       setVideoTrackCount(0);
+      setIsVideoPlaying(false);
       return;
     }
 
@@ -27,16 +28,16 @@ export const VideoTile = ({
       const activeTracks = stream.getVideoTracks().filter((t) => t.readyState === 'live');
       setVideoTrackCount(activeTracks.length);
       if (activeTracks.length > 0 && videoRef.current) {
-        if (videoRef.current.srcObject !== stream) {
-          videoRef.current.srcObject = stream;
+        const video = videoRef.current;
+        video.muted = true;
+        video.defaultMuted = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', '');
+        video.setAttribute('webkit-playsinline', '');
+        if (video.srcObject !== stream) {
+          video.srcObject = stream;
         }
-        videoRef.current.play?.().catch(() => {});
-      }
-      if (stream.getAudioTracks().length > 0 && audioRef.current && !isLocal) {
-        if (audioRef.current.srcObject !== stream) {
-          audioRef.current.srcObject = stream;
-        }
-        audioRef.current.play?.().catch(() => {});
+        video.play?.().catch(() => {});
       }
     };
 
@@ -75,40 +76,60 @@ export const VideoTile = ({
     };
   }, [stream, isLocal, isAudioEnabled]);
 
-  // Attach stream to video element
-  // Always muted so video frames decode and render immediately across all browsers
+  // Attach stream to video element with iOS Safari / WebKit compliance
   useEffect(() => {
-    if (videoRef.current && stream) {
-      if (videoRef.current.srcObject !== stream) {
-        videoRef.current.srcObject = stream;
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Critical DOM properties for iOS Safari WebKit inline video
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+
+    if (stream) {
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
       }
-      videoRef.current.play?.().catch((err) => {
+      video.play?.().catch((err) => {
         console.debug('Video autoplay catch:', err.message);
       });
+    } else {
+      video.srcObject = null;
+      setIsVideoPlaying(false);
     }
   }, [stream, role, isVideoEnabled]);
 
-  // Attach audio stream for remote participants and handle browser autoplay policy
+  // Track whether video element is actively decoding & playing frames
   useEffect(() => {
-    if (audioRef.current && stream && !isLocal) {
-      audioRef.current.srcObject = stream;
-      const playPromise = audioRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.debug('Remote audio autoplay waiting for user interaction:', err.message);
-          const unlockAudio = () => {
-            audioRef.current?.play().catch(() => {});
-            window.removeEventListener('click', unlockAudio);
-            window.removeEventListener('keydown', unlockAudio);
-            window.removeEventListener('touchstart', unlockAudio);
-          };
-          window.addEventListener('click', unlockAudio, { once: true });
-          window.addEventListener('keydown', unlockAudio, { once: true });
-          window.addEventListener('touchstart', unlockAudio, { once: true });
-        });
-      }
-    }
-  }, [stream, isLocal]);
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onPlaying = () => setIsVideoPlaying(true);
+    const onLoadedMetadata = () => {
+      if (video.videoWidth > 0) setIsVideoPlaying(true);
+      video.play?.().catch(() => {});
+    };
+    const onTimeUpdate = () => {
+      if (video.videoWidth > 0 && !isVideoPlaying) setIsVideoPlaying(true);
+    };
+    const onEndedOrPause = () => setIsVideoPlaying(false);
+
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('loadedmetadata', onLoadedMetadata);
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('pause', onEndedOrPause);
+    video.addEventListener('ended', onEndedOrPause);
+
+    return () => {
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('loadedmetadata', onLoadedMetadata);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('pause', onEndedOrPause);
+      video.removeEventListener('ended', onEndedOrPause);
+    };
+  }, [isVideoPlaying]);
 
   // Active speaker detection via Web Audio API
   useEffect(() => {
@@ -188,11 +209,16 @@ export const VideoTile = ({
 
   const isPresenter = role === 'presenter';
   const hasLiveVideoTrack = Boolean(
-    stream && stream.getVideoTracks().some((t) => t.readyState === 'live')
+    stream && stream.getVideoTracks().some((t) => t.readyState === 'live' && t.enabled)
   );
-  const hasActiveVideo = isLocal
+
+  // WebRTC video is actively rendering if local with video ON, or remote with live track / playing frames
+  const hasActiveWebRTCVideo = isLocal
     ? isVideoEnabled
-    : (isPresenter || isVideoEnabled || hasLiveVideoTrack || videoTrackCount > 0);
+    : (isVideoEnabled || isPresenter) && (isVideoPlaying || hasLiveVideoTrack || videoTrackCount > 0);
+
+  // Either WebRTC stream or Socket frame relay is available
+  const hasAnyVideoContent = hasActiveWebRTCVideo || Boolean(frame);
 
   return (
     <div
@@ -208,31 +234,32 @@ export const VideoTile = ({
         autoPlay
         playsInline
         muted
+        onPlaying={() => setIsVideoPlaying(true)}
+        onLoadedMetadata={() => setIsVideoPlaying(true)}
         className={`w-full h-full ${
           isPresenter ? 'object-contain' : 'object-cover'
         } transition-opacity duration-200 ${
-          hasActiveVideo ? 'opacity-100 relative z-0' : 'opacity-0 pointer-events-none absolute inset-0'
+          hasActiveWebRTCVideo
+            ? 'opacity-100 relative z-10'
+            : 'opacity-0 pointer-events-none absolute inset-0'
         } ${isLocal && !isPresenter ? 'scale-x-[-1]' : ''}`}
       />
 
-      {/* Hidden audio element for remote stream audio */}
-      {!isLocal && (
-        <audio ref={audioRef} autoPlay playsInline />
-      )}
-
-      {/* Presenter connecting state or Avatar Fallback */}
-      {/* Fallback frame image from socket frame relay if video track has not started rendering yet */}
-      {frame && !hasActiveVideo && (
+      {/* Fallback frame image from socket frame relay (renders when WebRTC video is connecting or across NAT) */}
+      {frame && (
         <img
           src={frame}
           alt={name}
           className={`w-full h-full ${
-            isPresenter ? "object-contain" : "object-cover"
-          } absolute inset-0 z-0`}
+            isPresenter ? 'object-contain' : 'object-cover'
+          } absolute inset-0 transition-opacity duration-200 ${
+            hasActiveWebRTCVideo ? 'opacity-0 pointer-events-none z-0' : 'opacity-100 z-10'
+          }`}
         />
       )}
 
-      {!hasActiveVideo && !frame && isPresenter ? (
+      {/* Presenter connecting state or Avatar Fallback */}
+      {!hasAnyVideoContent && isPresenter ? (
         <div className="flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200">
           <div className="w-16 h-16 rounded-2xl bg-neutral-900 border border-neutral-700 flex items-center justify-center text-white mb-3 shadow-lg">
             <Radio size={28} className="animate-pulse text-indigo-400" />
@@ -240,7 +267,7 @@ export const VideoTile = ({
           <span className="text-sm font-semibold text-neutral-200">{name}</span>
           <span className="text-xs text-neutral-400 mt-1">Connecting to screen share...</span>
         </div>
-      ) : !hasActiveVideo && !frame && (
+      ) : !hasAnyVideoContent && (
         <div className="flex flex-col items-center justify-center p-4">
           <div
             className={`w-20 h-20 rounded-full bg-neutral-900 border-2 flex items-center justify-center text-white text-2xl font-bold shadow-inner transition-all duration-200 ${
@@ -261,7 +288,7 @@ export const VideoTile = ({
       )}
 
       {/* Top Left: Badges */}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 z-20">
         {isHost && (
           <span className="px-2 py-0.5 text-[11px] font-semibold bg-white text-black rounded-md border border-white">
             Host
@@ -281,7 +308,7 @@ export const VideoTile = ({
       </div>
 
       {/* Bottom Bar: Name & Mic status */}
-      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-10 pointer-events-none">
+      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20 pointer-events-none">
         <div className="px-2.5 py-1 bg-neutral-900/90 rounded-md text-xs font-medium text-white truncate max-w-[70%] border border-neutral-800 flex items-center gap-1.5">
           <span className="truncate">{name}</span>
         </div>

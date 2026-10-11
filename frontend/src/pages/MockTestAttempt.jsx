@@ -17,7 +17,15 @@ import {
   Award,
   BookOpen,
   LayoutGrid,
-  Filter,
+  Maximize2,
+  Minimize2,
+  ShieldAlert,
+  AlertTriangle,
+  Activity,
+  History,
+  EyeOff,
+  Eye,
+  FileText,
 } from 'lucide-react';
 
 export const MockTestAttempt = () => {
@@ -25,92 +33,340 @@ export const MockTestAttempt = () => {
   const [searchParams] = useSearchParams();
   const viewAttemptId = searchParams.get('viewAttempt');
   const navigate = useNavigate();
-  const { success, error, info } = useToast();
+  const { success, error, info, warning } = useToast();
 
-  const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState('loading');
   const [test, setTest] = useState(null);
+  const [activeSession, setActiveSession] = useState(null);
+  const [acknowledgedInstructions, setAcknowledgedInstructions] = useState(false);
+
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState({}); // { [questionIndex]: optionIndex }
+  const [selectedAnswers, setSelectedAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(0);
-  const [initialDuration, setInitialDuration] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showMobilePalette, setShowMobilePalette] = useState(false);
-  const [reviewFilter, setReviewFilter] = useState('all'); // 'all' | 'incorrect' | 'unattempted' | 'correct'
+  const [reviewFilter, setReviewFilter] = useState('all');
   const [result, setResult] = useState(null);
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
+  const [showAwayBanner, setShowAwayBanner] = useState(false);
+  const [lastAwayDuration, setLastAwayDuration] = useState(0);
+  const [sessionMeta, setSessionMeta] = useState({
+    resumeCount: 0,
+    maxResumesAllowed: 4,
+    resumesRemaining: 4,
+    tabSwitchCount: 0,
+    totalTimeAwaySeconds: 0,
+    fullscreenExitCount: 0,
+    activityEvents: [],
+  });
+
   const timerRef = useRef(null);
-  const startTimeRef = useRef(Date.now());
+  const serverDeadlineRef = useRef(null);
+  const awayStartTimeRef = useRef(null);
+  const isAwayRef = useRef(false);
 
   useEffect(() => {
-    loadTestOrAttempt();
+    initPage();
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [id, viewAttemptId]);
 
-  const loadTestOrAttempt = async () => {
+  useEffect(() => {
+    if (mode !== 'testing' || result) return;
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        if (!isAwayRef.current) {
+          isAwayRef.current = true;
+          awayStartTimeRef.current = Date.now();
+          mockTestApi.recordSessionActivity(id, {
+            type: 'tab_hidden',
+            leftAt: new Date(awayStartTimeRef.current).toISOString(),
+            details: 'Test page became hidden (switched tab or minimized browser)',
+          }).catch(() => {});
+        }
+      } else {
+        if (isAwayRef.current && awayStartTimeRef.current) {
+          const returnedAt = Date.now();
+          const duration = Math.max(1, Math.round((returnedAt - awayStartTimeRef.current) / 1000));
+          const leftAtIso = new Date(awayStartTimeRef.current).toISOString();
+          isAwayRef.current = false;
+          awayStartTimeRef.current = null;
+
+          setLastAwayDuration(duration);
+          setShowAwayBanner(true);
+
+          mockTestApi.recordSessionActivity(id, {
+            type: 'tab_visible',
+            leftAt: leftAtIso,
+            returnedAt: new Date(returnedAt).toISOString(),
+            durationSeconds: duration,
+            details: `User returned to the test after ${duration} seconds away`,
+          }).then((res) => {
+            if (res.data?.data) {
+              setSessionMeta((prev) => ({
+                ...prev,
+                tabSwitchCount: res.data.data.tabSwitchCount,
+                totalTimeAwaySeconds: res.data.data.totalTimeAwaySeconds,
+              }));
+            }
+          }).catch(() => {});
+        }
+      }
+    };
+
+    const onFullscreenChange = () => {
+      const isFs = Boolean(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+      setIsFullscreen(isFs);
+
+      if (!isFs) {
+        setShowFullscreenWarning(true);
+        mockTestApi.recordSessionActivity(id, {
+          type: 'fullscreen_exit',
+          leftAt: new Date().toISOString(),
+          details: 'Fullscreen mode was exited',
+        }).then((res) => {
+          if (res.data?.data) {
+            setSessionMeta((prev) => ({
+              ...prev,
+              fullscreenExitCount: res.data.data.fullscreenExitCount,
+            }));
+          }
+        }).catch(() => {});
+      } else {
+        setShowFullscreenWarning(false);
+        mockTestApi.recordSessionActivity(id, {
+          type: 'fullscreen_enter',
+          leftAt: new Date().toISOString(),
+          details: 'Fullscreen mode was restored',
+        }).catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+    };
+  }, [mode, result, id]);
+
+  const initPage = async () => {
     try {
-      setLoading(true);
+      setMode('loading');
       if (viewAttemptId) {
         const res = await mockTestApi.getAttemptResult(viewAttemptId);
         const attempt = res.data.data.attempt;
         setResult(attempt);
         setTest(attempt.mockTest);
-        setLoading(false);
+        setMode('result');
         return;
       }
 
-      const res = await mockTestApi.getById(id);
-      const testData = res.data.data.test;
+      const testRes = await mockTestApi.getById(id);
+      const testData = testRes.data.data.test;
       setTest(testData);
 
-      const totalSeconds = (testData.durationMinutes || 15) * 60;
-      setTimeLeft(totalSeconds);
-      setInitialDuration(totalSeconds);
-      startTimeRef.current = Date.now();
-      setSelectedAnswers({});
-      setCurrentIndex(0);
-      setResult(null);
+      const sessionRes = await mockTestApi.getSessionStatus(id);
+      const sessionData = sessionRes.data.data;
 
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current);
-            handleAutoSubmit();
-            return 0;
-          }
-          return prev - 1;
+      if (sessionData?.hasActiveSession && sessionData?.session) {
+        setActiveSession(sessionData.session);
+        setSessionMeta({
+          resumeCount: sessionData.session.resumeCount || 0,
+          maxResumesAllowed: sessionData.session.maxResumesAllowed || 4,
+          resumesRemaining: sessionData.session.resumesRemaining ?? 4,
+          tabSwitchCount: sessionData.session.tabSwitchCount || 0,
+          totalTimeAwaySeconds: sessionData.session.totalTimeAwaySeconds || 0,
+          fullscreenExitCount: sessionData.session.fullscreenExitCount || 0,
+          activityEvents: sessionData.session.activityEvents || [],
         });
-      }, 1000);
+        setMode('resume_prompt');
+      } else if (sessionData?.isExpired && sessionData?.attemptId) {
+        info('Previous test session expired and was automatically submitted.');
+        const res = await mockTestApi.getAttemptResult(sessionData.attemptId);
+        setResult(res.data.data.attempt);
+        setMode('result');
+      } else {
+        setMode('instructions');
+      }
     } catch (err) {
-      console.error('Error loading mock test:', err);
+      console.error('Error initializing mock test:', err);
       error('Failed to load mock test. Please try again.');
       navigate('/mock-tests');
-    } finally {
-      setLoading(false);
     }
   };
 
+  const requestFullscreen = async () => {
+    try {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen();
+      } else if (elem.webkitRequestFullscreen) {
+        await elem.webkitRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        await elem.mozRequestFullScreen();
+      } else if (elem.msRequestFullscreen) {
+        await elem.msRequestFullscreen();
+      }
+      setIsFullscreen(true);
+      setShowFullscreenWarning(false);
+    } catch (err) {
+      console.warn('Fullscreen request bypassed by browser permissions:', err);
+      setIsFullscreen(false);
+    }
+  };
+
+  const handleStartTest = async () => {
+    if (!acknowledgedInstructions) {
+      warning('Please read and confirm the instructions checkbox before proceeding.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await requestFullscreen();
+
+      const res = await mockTestApi.startSession(id);
+      const session = res.data.data.session;
+      setActiveSession(session);
+
+      const parsedAnswers = {};
+      if (session.savedAnswers) {
+        Object.entries(session.savedAnswers).forEach(([k, v]) => {
+          parsedAnswers[Number(k)] = Number(v);
+        });
+      }
+      setSelectedAnswers(parsedAnswers);
+      setCurrentIndex(session.currentQuestionIndex || 0);
+
+      setSessionMeta({
+        resumeCount: session.resumeCount || 0,
+        maxResumesAllowed: session.maxResumesAllowed || 4,
+        resumesRemaining: session.resumesRemaining ?? 4,
+        tabSwitchCount: session.tabSwitchCount || 0,
+        totalTimeAwaySeconds: session.totalTimeAwaySeconds || 0,
+        fullscreenExitCount: session.fullscreenExitCount || 0,
+        activityEvents: session.activityEvents || [],
+      });
+
+      const deadlineMs = new Date(session.deadline).getTime();
+      serverDeadlineRef.current = deadlineMs;
+      const initialRemaining = Math.max(0, Math.round((deadlineMs - Date.now()) / 1000));
+      setTimeLeft(initialRemaining);
+
+      startCountdown(deadlineMs);
+      setMode('testing');
+      success('Mock test officially started. Good luck!');
+    } catch (err) {
+      console.error('Failed to start test session:', err);
+      error(err.response?.data?.message || 'Failed to start test session.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResumeTest = async () => {
+    try {
+      setIsResuming(true);
+      await requestFullscreen();
+
+      const res = await mockTestApi.resumeSession(id);
+      const session = res.data.data.session;
+      setActiveSession(session);
+
+      const parsedAnswers = {};
+      if (session.savedAnswers) {
+        Object.entries(session.savedAnswers).forEach(([k, v]) => {
+          parsedAnswers[Number(k)] = Number(v);
+        });
+      }
+      setSelectedAnswers(parsedAnswers);
+      setCurrentIndex(session.currentQuestionIndex || 0);
+
+      setSessionMeta({
+        resumeCount: session.resumeCount || 0,
+        maxResumesAllowed: session.maxResumesAllowed || 4,
+        resumesRemaining: session.resumesRemaining ?? (4 - session.resumeCount),
+        tabSwitchCount: session.tabSwitchCount || 0,
+        totalTimeAwaySeconds: session.totalTimeAwaySeconds || 0,
+        fullscreenExitCount: session.fullscreenExitCount || 0,
+        activityEvents: session.activityEvents || [],
+      });
+
+      const deadlineMs = new Date(session.deadline).getTime();
+      serverDeadlineRef.current = deadlineMs;
+      const initialRemaining = Math.max(0, Math.round((deadlineMs - Date.now()) / 1000));
+      setTimeLeft(initialRemaining);
+
+      startCountdown(deadlineMs);
+      setMode('testing');
+      success(`Session resumed successfully! (Attempt ${session.resumeCount} of ${session.maxResumesAllowed || 4})`);
+    } catch (err) {
+      console.error('Failed to resume session:', err);
+      error(err.response?.data?.message || 'Failed to resume test session.');
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
+  const startCountdown = (deadlineMs) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      const now = Date.now();
+      const diff = Math.max(0, Math.round((deadlineMs - now) / 1000));
+      setTimeLeft(diff);
+
+      if (diff <= 0) {
+        clearInterval(timerRef.current);
+        handleAutoSubmit();
+      }
+    }, 1000);
+  };
+
   const handleAutoSubmit = () => {
-    info('Time is up! Submitting your answers automatically.');
+    info('Time limit reached! Submitting your answers automatically.');
     submitTestInternal();
   };
 
   const handleOptionSelect = (optionIdx) => {
-    if (result) return;
-    setSelectedAnswers((prev) => ({
-      ...prev,
-      [currentIndex]: optionIdx,
-    }));
+    if (result || mode !== 'testing') return;
+
+    setSelectedAnswers((prev) => {
+      const next = { ...prev, [currentIndex]: optionIdx };
+      mockTestApi.saveSessionAnswer(id, {
+        questionIndex: currentIndex,
+        selectedOption: optionIdx,
+        currentQuestionIndex: currentIndex,
+      }).catch((e) => console.warn('Background auto-save warning:', e));
+      return next;
+    });
   };
 
   const handleClearAnswer = () => {
-    if (result) return;
+    if (result || mode !== 'testing') return;
+
     setSelectedAnswers((prev) => {
       const next = { ...prev };
       delete next[currentIndex];
+      mockTestApi.saveSessionAnswer(id, {
+        questionIndex: currentIndex,
+        selectedOption: -1,
+        currentQuestionIndex: currentIndex,
+      }).catch((e) => console.warn('Background auto-save clear warning:', e));
       return next;
     });
   };
@@ -121,6 +377,16 @@ export const MockTestAttempt = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    } catch {
+      return String(dateStr);
+    }
+  };
+
   const attemptedCount = Object.keys(selectedAnswers).length;
   const totalQuestions = test?.questions?.length || 0;
   const unattemptedCount = Math.max(0, totalQuestions - attemptedCount);
@@ -129,22 +395,20 @@ export const MockTestAttempt = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     try {
       setIsSubmitting(true);
-      const timeSpentSeconds = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
-
-      const payload = {
-        answers: selectedAnswers,
-        timeSpentSeconds,
-      };
-
-      const res = await mockTestApi.submit(id, payload);
+      const res = await mockTestApi.submit(id, { answers: selectedAnswers });
       const attemptData = res.data.data.attempt;
       setResult(attemptData);
       setShowConfirmModal(false);
       setShowMobilePalette(false);
-      success('Mock test submitted successfully!');
+      setMode('result');
+
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+      success('Mock test evaluated and submitted successfully!');
     } catch (err) {
       console.error('Submit error:', err);
-      error('Failed to submit test. Please check connection and try again.');
+      error(err.response?.data?.message || 'Failed to submit test. Please check connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -152,14 +416,243 @@ export const MockTestAttempt = () => {
 
   const handleRetake = () => {
     setResult(null);
-    loadTestOrAttempt();
+    setMode('instructions');
+    setAcknowledgedInstructions(false);
   };
 
-  if (loading) return <PageLoader />;
+  if (mode === 'loading') return <PageLoader />;
   if (!test) return null;
 
-  // ===================== RESULT / REVIEW MODE =====================
-  if (result) {
+  // ===================== 1. TEST INSTRUCTIONS & GUIDELINES MODE =====================
+  if (mode === 'instructions') {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full space-y-6">
+        <div className="flex items-center justify-between pb-3 border-b border-border-color">
+          <Link
+            to="/mock-tests"
+            className="text-xs font-semibold text-text-secondary hover:text-text-primary flex items-center gap-1.5 transition"
+          >
+            <ArrowLeft size={14} />
+            Back to All Mock Tests
+          </Link>
+          <span className="text-xs font-mono text-text-secondary">
+            Category: {test.category}
+          </span>
+        </div>
+
+        <div className="card p-6 sm:p-8 space-y-6">
+          <div className="border-b border-border-color pb-5">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color">
+                Assessment Instructions
+              </span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded border border-border-color bg-surface-50 dark:bg-surface-800 text-text-secondary">
+                {test.difficulty || 'Medium'} Difficulty
+              </span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-text-primary">
+              {test.title}
+            </h1>
+            <p className="text-xs sm:text-sm text-text-secondary mt-1 leading-relaxed">
+              {test.description || 'Please carefully review the examination guidelines, navigation rules, and session monitoring policies before beginning.'}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3.5 rounded-lg border border-border-color bg-surface-50 dark:bg-surface-800/40 text-center">
+              <span className="block text-[11px] text-text-secondary font-medium">Duration</span>
+              <span className="block text-lg font-bold text-text-primary font-mono mt-0.5">
+                {test.durationMinutes} Mins
+              </span>
+            </div>
+            <div className="p-3.5 rounded-lg border border-border-color bg-surface-50 dark:bg-surface-800/40 text-center">
+              <span className="block text-[11px] text-text-secondary font-medium">Questions</span>
+              <span className="block text-lg font-bold text-text-primary font-mono mt-0.5">
+                {test.questions?.length || 0}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-lg border border-border-color bg-surface-50 dark:bg-surface-800/40 text-center">
+              <span className="block text-[11px] text-text-secondary font-medium">Total Marks</span>
+              <span className="block text-lg font-bold text-text-primary font-mono mt-0.5">
+                {test.totalMarks}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-lg border border-border-color bg-surface-50 dark:bg-surface-800/40 text-center">
+              <span className="block text-[11px] text-text-secondary font-medium">Negative Marking</span>
+              <span className="block text-sm font-bold text-text-primary font-mono mt-1">
+                {test.hasNegativeMarking ? `-${test.negativeMarks} marks` : 'None'}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-4 text-xs text-text-secondary leading-relaxed border-t border-border-color pt-5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
+              <FileText size={15} /> General Instructions & Guidelines
+            </h3>
+
+            <ul className="space-y-2.5 list-disc pl-5">
+              <li>
+                <strong className="text-text-primary">Countdown Timer:</strong> The examination timer will start immediately once you click <span className="font-semibold text-text-primary">"Enable Fullscreen & Start Test"</span>. The test auto-submits when time expires.
+              </li>
+              <li>
+                <strong className="text-text-primary">Navigation & Palette:</strong> You can navigate freely between questions using the Question Palette or the Next/Previous controls. You may change your chosen answer at any time prior to final submission.
+              </li>
+              <li>
+                <strong className="text-text-primary">Fullscreen Requirement:</strong> You will be prompted to enter fullscreen mode upon starting. A visible status banner will monitor fullscreen state throughout the test.
+              </li>
+              <li>
+                <strong className="text-text-primary">Activity & Tab-Switch Monitoring:</strong> Window minimization, tab switching, and leaving the test page are tracked as objective session activity indicators. (Note: System records events for assessment integrity; ordinary browser interactions are logged without falsely declaring misconduct).
+              </li>
+              <li>
+                <strong className="text-text-primary">Session Resume Policy (Max 4 Attempts):</strong> If you encounter a network disconnection or refresh your browser, your answers and remaining time are preserved. You are allowed up to a maximum of <strong className="text-text-primary">4 successful resume attempts</strong> per test session.
+              </li>
+              <li>
+                <strong className="text-text-primary">Submission:</strong> Review all answered questions using the Question Palette before clicking <span className="font-semibold text-text-primary">"Submit Test"</span>. Once submitted, your scorecard and answer key analysis will be evaluated instantly.
+              </li>
+            </ul>
+          </div>
+
+          <div className="p-4 rounded-xl bg-surface-100 dark:bg-surface-800 border border-border-color flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="acknowledgeInstructions"
+              checked={acknowledgedInstructions}
+              onChange={(e) => setAcknowledgedInstructions(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-border-color text-text-primary focus:ring-0 cursor-pointer"
+            />
+            <label htmlFor="acknowledgeInstructions" className="text-xs text-text-primary cursor-pointer select-none leading-relaxed">
+              <strong>I have read and understood the test instructions and guidelines.</strong> I agree to enter fullscreen mode and abide by the session monitoring and resume policies.
+            </label>
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => navigate('/mock-tests')}
+              className="btn btn-secondary btn-sm w-full sm:w-auto"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={handleStartTest}
+              disabled={!acknowledgedInstructions || isSubmitting}
+              className="btn btn-primary btn-sm w-full sm:w-auto flex items-center justify-center gap-2 disabled:opacity-40"
+            >
+              <Maximize2 size={15} />
+              <span>{isSubmitting ? 'Starting Session...' : 'Enable Fullscreen & Start Test'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===================== 2. RESUME ACTIVE SESSION PROMPT MODE =====================
+  if (mode === 'resume_prompt') {
+    const resumesUsed = sessionMeta.resumeCount || 0;
+    const maxResumes = sessionMeta.maxResumesAllowed || 4;
+    const resumesRemaining = Math.max(0, maxResumes - resumesUsed);
+    const canResume = resumesRemaining > 0;
+
+    return (
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
+        <div className="card p-6 sm:p-8 space-y-6 border-neutral-500 shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-surface-100 dark:bg-surface-800 border border-border-color text-text-primary">
+              <History size={22} />
+            </div>
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-text-primary">
+                Active Test Session Detected
+              </h2>
+              <p className="text-xs text-text-secondary mt-0.5">
+                An active assessment session was found for this mock test.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 border border-border-color space-y-3 text-xs">
+            <div className="flex justify-between border-b border-border-color pb-2">
+              <span className="text-text-secondary">Test Title:</span>
+              <span className="font-semibold text-text-primary">{test.title}</span>
+            </div>
+            <div className="flex justify-between border-b border-border-color pb-2">
+              <span className="text-text-secondary">Original Start Time:</span>
+              <span className="font-mono text-text-primary">{formatDateTime(activeSession.startedAt)}</span>
+            </div>
+            <div className="flex justify-between border-b border-border-color pb-2">
+              <span className="text-text-secondary">Remaining Time:</span>
+              <span className="font-mono font-bold text-text-primary">{formatTimer(activeSession.remainingSeconds)}</span>
+            </div>
+            <div className="flex justify-between border-b border-border-color pb-2">
+              <span className="text-text-secondary">Answers Saved:</span>
+              <span className="font-mono font-bold text-text-primary">
+                {Object.keys(activeSession.savedAnswers || {}).length} of {test.questions?.length}
+              </span>
+            </div>
+            <div className="flex justify-between pt-1">
+              <span className="text-text-secondary">Resume Attempts Remaining:</span>
+              <span className={`font-mono font-bold ${canResume ? 'text-text-primary' : 'text-neutral-400'}`}>
+                {resumesRemaining} of {maxResumes}
+              </span>
+            </div>
+          </div>
+
+          {canResume ? (
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Clicking <strong className="text-text-primary">Resume Test</strong> will restore your answers and timer. This will consume 1 of your {resumesRemaining} remaining resume attempts.
+            </p>
+          ) : (
+            <div className="p-3.5 rounded-lg border border-neutral-500 bg-surface-100 dark:bg-surface-800 text-xs text-text-primary space-y-1">
+              <strong className="block flex items-center gap-1.5">
+                <ShieldAlert size={14} /> Maximum Resume Limit Reached
+              </strong>
+              <p className="text-text-secondary leading-relaxed">
+                You have already used all 4 allowed resume attempts for this test session. No further resumes are permitted. You may submit your currently saved answers for final scoring.
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => navigate('/mock-tests')}
+              className="btn btn-secondary btn-sm w-full sm:w-auto"
+            >
+              Back to Mock Tests
+            </button>
+
+            {canResume ? (
+              <button
+                type="button"
+                onClick={handleResumeTest}
+                disabled={isResuming}
+                className="btn btn-primary btn-sm w-full sm:w-auto flex items-center justify-center gap-2"
+              >
+                <RotateCcw size={14} />
+                <span>{isResuming ? 'Resuming Session...' : `Resume Test (${resumesRemaining} Remaining)`}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submitTestInternal}
+                disabled={isSubmitting}
+                className="btn btn-primary btn-sm w-full sm:w-auto flex items-center justify-center gap-2"
+              >
+                <Send size={14} />
+                <span>{isSubmitting ? 'Evaluating...' : 'Submit Saved Answers'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===================== 3. DETAILED RESULT & TIMELINE REVIEW MODE =====================
+  if (mode === 'result' && result) {
     const isPass = result.isPassed;
     const accuracy =
       result.correctCount + result.incorrectCount > 0
@@ -173,7 +666,7 @@ export const MockTestAttempt = () => {
       if (reviewFilter === 'correct') return isUserCorrect;
       if (reviewFilter === 'incorrect') return !isUserCorrect && !isUnattempted;
       if (reviewFilter === 'unattempted') return isUnattempted;
-      return true; // 'all'
+      return true;
     });
 
     return (
@@ -212,7 +705,7 @@ export const MockTestAttempt = () => {
                 {result.mockTestTitle || test.title}
               </h1>
               <p className="text-xs text-text-secondary mt-1">
-                Completed in {Math.floor(result.timeSpentSeconds / 60)} mins {result.timeSpentSeconds % 60} secs
+                Started: {formatDateTime(result.startedAt || result.createdAt)} • Submitted: {formatDateTime(result.submittedAt || result.createdAt)}
               </p>
             </div>
 
@@ -254,18 +747,37 @@ export const MockTestAttempt = () => {
             </div>
           </div>
 
-          <div className="p-4 rounded-lg bg-surface-50 dark:bg-surface-800/50 border border-border-color space-y-1">
+          {/* Session Security Indicators */}
+          <div className="space-y-2 pt-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
-              <Award size={14} />
-              Performance Summary
+              <ShieldAlert size={14} /> Session Integrity & Security Indicators
             </h3>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              {result.percentage >= 75
-                ? 'Outstanding performance! You displayed exceptional grasp across key syllabus concepts and comfortably cleared the benchmark cutoff.'
-                : result.percentage >= (result.passingPercentage || 40)
-                ? 'Good effort! You cleared the passing threshold. Focus on reviewing incorrect responses below to boost speed and precision for actual exam day.'
-                : 'Need more practice. Review the detailed explanations below for each question to solidify conceptual clarity.'}
-            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div className="p-3 rounded-lg border border-border-color bg-surface-50 dark:bg-surface-800/40">
+                <span className="block text-[11px] text-text-secondary">Tab/Focus Changes</span>
+                <span className="block text-base font-bold text-text-primary font-mono mt-0.5">
+                  {result.tabSwitchCount || 0}
+                </span>
+              </div>
+              <div className="p-3 rounded-lg border border-border-color bg-surface-50 dark:bg-surface-800/40">
+                <span className="block text-[11px] text-text-secondary">Time Away from Test</span>
+                <span className="block text-base font-bold text-text-primary font-mono mt-0.5">
+                  {result.totalTimeAwaySeconds || 0}s
+                </span>
+              </div>
+              <div className="p-3 rounded-lg border border-border-color bg-surface-50 dark:bg-surface-800/40">
+                <span className="block text-[11px] text-text-secondary">Fullscreen Exits</span>
+                <span className="block text-base font-bold text-text-primary font-mono mt-0.5">
+                  {result.fullscreenExitCount || 0}
+                </span>
+              </div>
+              <div className="p-3 rounded-lg border border-border-color bg-surface-50 dark:bg-surface-800/40">
+                <span className="block text-[11px] text-text-secondary">Resumes Used</span>
+                <span className="block text-base font-bold text-text-primary font-mono mt-0.5">
+                  {result.resumeCount || 0} <span className="text-xs font-normal text-text-secondary">/ {result.maxResumesAllowed || 4}</span>
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -285,6 +797,71 @@ export const MockTestAttempt = () => {
           </div>
         </div>
 
+        {/* Dedicated Activity Timeline */}
+        <div className="card p-5 sm:p-7 space-y-4">
+          <div className="flex items-center justify-between border-b border-border-color pb-3">
+            <div>
+              <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+                <Activity size={17} />
+                Test Activity Timeline
+              </h2>
+              <p className="text-xs text-text-secondary mt-0.5">
+                Objective chronological audit log of session start, resumes, focus changes, and submission.
+              </p>
+            </div>
+            <span className="text-xs font-mono text-text-secondary">
+              {(result.activityEvents || []).length} Recorded Events
+            </span>
+          </div>
+
+          {(result.activityEvents || []).length === 0 ? (
+            <p className="text-xs text-text-secondary py-3">No activity events recorded for this session.</p>
+          ) : (
+            <div className="space-y-3 pt-2 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-border-color">
+              {result.activityEvents.map((evt, idx) => {
+                let icon = <Activity size={13} />;
+
+                if (evt.type === 'test_started') {
+                  icon = <Clock size={13} />;
+                } else if (evt.type === 'tab_hidden' || evt.type === 'tab_visible') {
+                  icon = <EyeOff size={13} />;
+                } else if (evt.type === 'fullscreen_exit') {
+                  icon = <Minimize2 size={13} />;
+                } else if (evt.type === 'test_resumed') {
+                  icon = <RotateCcw size={13} />;
+                } else if (evt.type === 'test_submitted') {
+                  icon = <CheckCircle2 size={13} />;
+                }
+
+                return (
+                  <div key={idx} className="relative flex items-start gap-3.5 pl-1.5">
+                    <div className="w-5 h-5 rounded-full border border-border-color bg-surface-50 dark:bg-surface-900 flex items-center justify-center shrink-0 z-10 text-text-primary">
+                      {icon}
+                    </div>
+
+                    <div className="flex-1 p-3 rounded-lg border border-border-color bg-surface-50 dark:bg-surface-800/40 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                      <div>
+                        <span className="font-semibold text-text-primary">
+                          {evt.details || evt.type.replace(/_/g, ' ')}
+                        </span>
+                        {evt.durationSeconds > 0 && (
+                          <span className="ml-2 font-mono text-[11px] px-1.5 py-0.5 rounded bg-surface-200 dark:bg-surface-700 text-text-secondary">
+                            Duration: {evt.durationSeconds}s
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono text-[11px] text-text-secondary shrink-0">
+                        {formatDateTime(evt.timestamp)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Question Review Section */}
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -332,10 +909,7 @@ export const MockTestAttempt = () => {
                 const isUnattempted = ans.selectedOption === -1 || ans.selectedOption === null || ans.selectedOption === undefined;
 
                 return (
-                  <div
-                    key={idx}
-                    className="card p-4 sm:p-5 space-y-3.5 border-border-color"
-                  >
+                  <div key={idx} className="card p-4 sm:p-5 space-y-3.5 border-border-color">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="text-xs font-bold text-text-primary font-mono">
                         Question {displayQNumber}
@@ -420,36 +994,91 @@ export const MockTestAttempt = () => {
     );
   }
 
-  // ===================== ACTIVE TEST ATTEMPT MODE =====================
+  // ===================== 4. ACTIVE TEST ATTEMPT MODE =====================
   const currentQuestion = test.questions?.[currentIndex];
   const isLastQuestion = currentIndex === (test.questions?.length || 1) - 1;
-  const isTimeLow = timeLeft < 120; // less than 2 mins
+  const isTimeLow = timeLeft < 120;
+  const resumesUsed = sessionMeta.resumeCount || 0;
+  const maxResumes = sessionMeta.maxResumesAllowed || 4;
+  const resumesRemaining = Math.max(0, maxResumes - resumesUsed);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 w-full space-y-5 sm:space-y-6 pb-24 lg:pb-6">
-      {/* Test Header */}
-      <div className="card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-16 z-20 backdrop-blur-md bg-surface-0/95 dark:bg-surface-900/95 shadow-sm">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 w-full space-y-4 sm:space-y-5 pb-24 lg:pb-6">
+      {showAwayBanner && (
+        <div className="p-3.5 rounded-xl border border-neutral-500 bg-surface-100 dark:bg-surface-800 text-xs text-text-primary flex items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <EyeOff size={16} className="text-text-secondary shrink-0" />
+            <span>
+              You left the test page for <strong>{lastAwayDuration} seconds</strong>. This activity has been recorded in your session audit timeline.
+            </span>
+          </div>
+          <button
+            onClick={() => setShowAwayBanner(false)}
+            className="p-1 rounded text-text-secondary hover:text-text-primary transition"
+            aria-label="Dismiss banner"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {showFullscreenWarning && !isFullscreen && (
+        <div className="p-3.5 rounded-xl border border-neutral-500 bg-surface-200 dark:bg-surface-800 text-xs text-text-primary flex items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <Minimize2 size={16} className="text-text-secondary shrink-0" />
+            <span>
+              <strong>Fullscreen Exited:</strong> Please re-enter fullscreen mode to maintain standard testing conditions.
+            </span>
+          </div>
+          <button
+            onClick={requestFullscreen}
+            className="btn btn-secondary btn-sm text-xs flex items-center gap-1.5 shrink-0"
+          >
+            <Maximize2 size={13} />
+            <span>Re-enter Fullscreen</span>
+          </button>
+        </div>
+      )}
+
+      <div className="card p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sticky top-16 z-20 backdrop-blur-md bg-surface-0/95 dark:bg-surface-900/95 shadow-sm">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color">
               {test.category}
             </span>
-            <span className="text-xs text-text-secondary font-mono">
-              Marks: +{currentQuestion?.marks || 1} / -{currentQuestion?.negativeMarks || 0.33}
+
+            {isFullscreen ? (
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-neutral-100 animate-pulse" />
+                Fullscreen Active
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={requestFullscreen}
+                className="text-[11px] font-semibold px-2 py-0.5 rounded bg-surface-200 dark:bg-surface-700 text-text-primary border border-neutral-500 flex items-center gap-1 hover:underline touch-manipulation"
+                title="Click to enter fullscreen"
+              >
+                <Maximize2 size={11} />
+                Enter Fullscreen
+              </button>
+            )}
+
+            <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-surface-50 dark:bg-surface-800 text-text-secondary border border-border-color">
+              Resumes: {resumesRemaining}/4
             </span>
           </div>
-          <h1 className="text-sm sm:text-base md:text-lg font-bold text-text-primary mt-1 truncate">
+
+          <h1 className="text-sm sm:text-base font-bold text-text-primary mt-1 truncate">
             {test.title}
           </h1>
         </div>
 
-        {/* Live Timer, Mobile Palette Trigger & Submit Action */}
-        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
           <button
             onClick={() => setShowMobilePalette(true)}
             className="lg:hidden btn btn-secondary btn-sm flex items-center gap-1.5 font-mono text-xs touch-manipulation px-2.5 py-1.5"
             title="Open Question Palette"
-            aria-label="Open Question Palette"
           >
             <LayoutGrid size={15} />
             <span>{attemptedCount}/{totalQuestions}</span>
@@ -477,9 +1106,7 @@ export const MockTestAttempt = () => {
         </div>
       </div>
 
-      {/* Main Test Grid: Question on left, Palette on right */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-        {/* Left Column: Current Question */}
         <div className="lg:col-span-3 space-y-4">
           <div className="card p-5 sm:p-6 space-y-6 min-h-[360px] flex flex-col justify-between">
             <div className="space-y-4">
@@ -533,7 +1160,6 @@ export const MockTestAttempt = () => {
               </div>
             </div>
 
-            {/* Desktop Question Controls */}
             <div className="hidden lg:flex items-center justify-between pt-4 border-t border-border-color">
               <button
                 onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
@@ -567,7 +1193,6 @@ export const MockTestAttempt = () => {
           </div>
         </div>
 
-        {/* Right Column: Question Palette (Desktop view) */}
         <div className="card p-5 space-y-4 hidden lg:block sticky top-36">
           <div className="flex items-center justify-between pb-3 border-b border-border-color">
             <h3 className="text-xs font-bold uppercase tracking-wider text-text-primary">
@@ -589,7 +1214,6 @@ export const MockTestAttempt = () => {
             </div>
           </div>
 
-          {/* Question Number Buttons Grid with Scroll Container for 100 questions */}
           <div className="max-h-[380px] overflow-y-auto overscroll-contain pr-1 custom-scrollbar">
             <div className="grid grid-cols-5 gap-2 pt-1">
               {test.questions?.map((_, qIdx) => {
@@ -629,7 +1253,6 @@ export const MockTestAttempt = () => {
         </div>
       </div>
 
-      {/* Sticky Bottom Bar for Mobile & Tablets */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface-0/95 dark:bg-surface-900/95 backdrop-blur-md border-t border-border-color px-4 py-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg flex items-center justify-between gap-2.5">
         <button
           onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
@@ -670,7 +1293,6 @@ export const MockTestAttempt = () => {
         )}
       </div>
 
-      {/* Mobile & Tablet Slide-Up Question Palette Modal */}
       {showMobilePalette && (
         <div className="lg:hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="card w-full sm:max-w-xl max-h-[85vh] flex flex-col rounded-b-none sm:rounded-2xl border-b-0 sm:border-b p-5 space-y-4 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
@@ -760,7 +1382,6 @@ export const MockTestAttempt = () => {
         </div>
       )}
 
-      {/* Confirmation Modal */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="card max-w-md w-full p-5 sm:p-6 space-y-5 animate-in zoom-in-95 duration-150">

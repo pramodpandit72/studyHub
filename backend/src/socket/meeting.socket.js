@@ -129,7 +129,7 @@ export const setupMeetingSocket = (io) => {
       }
     });
 
-    // WebRTC Signaling
+    // WebRTC Signaling (General & Dedicated Audio matching reference implementation)
     socket.on('offer', ({ to, offer }) => {
       io.to(to).emit('offer', { from: socket.id, offer });
     });
@@ -140,6 +140,77 @@ export const setupMeetingSocket = (io) => {
 
     socket.on('ice-candidate', ({ to, candidate }) => {
       io.to(to).emit('ice-candidate', { from: socket.id, candidate });
+    });
+
+    socket.on('audio-offer', (data) => {
+      const { roomId, offer, targetUserId, to } = data;
+      const targetId = to || targetUserId;
+      if (targetId) {
+        const targetSocket = io.sockets.sockets.get(targetId) || [...io.sockets.sockets.values()].find(
+          (s) => s.user?._id?.toString() === targetId || s.id === targetId
+        );
+        if (targetSocket) {
+          targetSocket.emit('audio-offer', {
+            offer,
+            from: socket.id,
+            fromUserId: socket.user?._id?.toString(),
+            fromUsername: socket.user?.name,
+          });
+        }
+      } else if (roomId) {
+        socket.to(roomId).emit('audio-offer', {
+          offer,
+          from: socket.id,
+          fromUserId: socket.user?._id?.toString(),
+          fromUsername: socket.user?.name,
+        });
+      }
+    });
+
+    socket.on('audio-answer', (data) => {
+      const { roomId, answer, targetUserId, to } = data;
+      const targetId = to || targetUserId;
+      if (targetId) {
+        const targetSocket = io.sockets.sockets.get(targetId) || [...io.sockets.sockets.values()].find(
+          (s) => s.user?._id?.toString() === targetId || s.id === targetId
+        );
+        if (targetSocket) {
+          targetSocket.emit('audio-answer', {
+            answer,
+            from: socket.id,
+            fromUserId: socket.user?._id?.toString(),
+          });
+        }
+      } else if (roomId) {
+        socket.to(roomId).emit('audio-answer', {
+          answer,
+          from: socket.id,
+          fromUserId: socket.user?._id?.toString(),
+        });
+      }
+    });
+
+    socket.on('audio-ice-candidate', (data) => {
+      const { roomId, candidate, targetUserId, to } = data;
+      const targetId = to || targetUserId;
+      if (targetId) {
+        const targetSocket = io.sockets.sockets.get(targetId) || [...io.sockets.sockets.values()].find(
+          (s) => s.user?._id?.toString() === targetId || s.id === targetId
+        );
+        if (targetSocket) {
+          targetSocket.emit('audio-ice-candidate', {
+            candidate,
+            from: socket.id,
+            fromUserId: socket.user?._id?.toString(),
+          });
+        }
+      } else if (roomId) {
+        socket.to(roomId).emit('audio-ice-candidate', {
+          candidate,
+          from: socket.id,
+          fromUserId: socket.user?._id?.toString(),
+        });
+      }
     });
 
     // Participant Media Toggles

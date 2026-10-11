@@ -13,6 +13,7 @@ export const VideoTile = ({
   className = '',
 }) => {
   const videoRef = useRef(null);
+  const audioRef = useRef(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [videoTrackCount, setVideoTrackCount] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
@@ -30,8 +31,8 @@ export const VideoTile = ({
       setVideoTrackCount(activeTracks.length);
       if (activeTracks.length > 0 && videoRef.current) {
         const video = videoRef.current;
-        video.muted = true;
-        video.defaultMuted = true;
+        video.muted = isLocal;
+        video.defaultMuted = isLocal;
         video.playsInline = true;
         video.setAttribute('playsinline', '');
         video.setAttribute('webkit-playsinline', '');
@@ -208,6 +209,41 @@ export const VideoTile = ({
     };
   }, [stream, isAudioEnabled]);
 
+  // Deliver remote participant audio reliably to speaker
+  useEffect(() => {
+    if (isLocal) return;
+    const audioEl = audioRef.current;
+    if (audioEl && stream) {
+      if (audioEl.srcObject !== stream) {
+        audioEl.srcObject = stream;
+      }
+      audioEl.play().catch((err) => {
+        console.debug('Remote audio autoplay waiting for gesture:', err.message);
+      });
+    }
+  }, [stream, isLocal, isAudioEnabled]);
+
+  // Unlock audio playback on first user gesture in room (click, touch, keydown)
+  useEffect(() => {
+    if (isLocal) return;
+    const unlock = () => {
+      if (audioRef.current && stream) {
+        audioRef.current.play().catch(() => {});
+      }
+      if (videoRef.current && stream && !isLocal) {
+        videoRef.current.play().catch(() => {});
+      }
+    };
+    window.addEventListener('click', unlock, { passive: true });
+    window.addEventListener('keydown', unlock, { passive: true });
+    window.addEventListener('touchstart', unlock, { passive: true });
+    return () => {
+      window.removeEventListener('click', unlock);
+      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('touchstart', unlock);
+    };
+  }, [isLocal, stream]);
+
   const isPresenter = role === 'presenter';
   const hasLiveVideoTrack = Boolean(
     stream && stream.getVideoTracks().some((t) => t.readyState === 'live' && t.enabled)
@@ -229,12 +265,21 @@ export const VideoTile = ({
           : 'border-neutral-800'
       } ${className}`}
     >
-      {/* Video Element - ALWAYS MUTED so video frames render immediately without autoplay blocking, object-contain prevents any cropping */}
+      {/* Remote Audio Playback Element - delivers audio directly from stream */}
+      {!isLocal && stream && (
+        <audio
+          ref={audioRef}
+          autoPlay
+          playsInline
+        />
+      )}
+
+      {/* Video Element - muted only for local user to prevent echo; unmuted for remote participants to hear audio */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
-        muted
+        muted={isLocal}
         onPlaying={() => setIsVideoPlaying(true)}
         onLoadedMetadata={() => setIsVideoPlaying(true)}
         className={`w-full h-full object-contain transition-opacity duration-200 ${

@@ -106,7 +106,7 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
     }
   }, []);
 
-  // Play remote audio through DOM-attached HTMLAudioElement (iOS WebKit / Safari requirement)
+  // Play remote audio through DOM-attached HTMLAudioElement (iOS WebKit / Safari / Android requirement)
   const playRemoteAudio = useCallback((remoteSocketId, stream) => {
     try {
       if (!stream || stream.getAudioTracks().length === 0) return;
@@ -115,7 +115,13 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
         audioEl = document.createElement('audio');
         audioEl.autoplay = true;
         audioEl.playsInline = true;
-        audioEl.style.display = 'none';
+        audioEl.style.position = 'fixed';
+        audioEl.style.top = '-9999px';
+        audioEl.style.left = '-9999px';
+        audioEl.style.width = '1px';
+        audioEl.style.height = '1px';
+        audioEl.style.opacity = '0.01';
+        audioEl.style.pointerEvents = 'none';
         document.body.appendChild(audioEl);
         audioElementsRef.current.set(remoteSocketId, audioEl);
       }
@@ -125,20 +131,20 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       const p = audioEl.play();
       if (p !== undefined) {
         p.catch((err) => {
-          console.debug("Background audio play pending gesture:", err.message);
+          console.debug('Background audio play pending gesture:', err.message);
           const unlock = () => {
             audioEl.play().catch(() => {});
-            window.removeEventListener("click", unlock);
-            window.removeEventListener("keydown", unlock);
-            window.removeEventListener("touchstart", unlock);
+            window.removeEventListener('click', unlock);
+            window.removeEventListener('keydown', unlock);
+            window.removeEventListener('touchstart', unlock);
           };
-          window.addEventListener("click", unlock, { once: true });
-          window.addEventListener("keydown", unlock, { once: true });
-          window.addEventListener("touchstart", unlock, { once: true });
+          window.addEventListener('click', unlock, { once: true });
+          window.addEventListener('keydown', unlock, { once: true });
+          window.addEventListener('touchstart', unlock, { once: true });
         });
       }
     } catch (e) {
-      console.debug("playRemoteAudio error:", e.message);
+      console.debug('playRemoteAudio error:', e.message);
     }
   }, []);
 
@@ -362,10 +368,12 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       }));
 
       if (event.track.kind === 'audio') {
+        event.track.enabled = true;
         playRemoteAudio(remoteSocketId, freshStream);
       }
 
       event.track.onunmute = () => {
+        event.track.enabled = true;
         const unmutedStream = new MediaStream(stream.getTracks());
         remoteStreamsRef.current[remoteSocketId] = unmutedStream;
         setRemoteStreams((prev) => ({ ...prev, [remoteSocketId]: unmutedStream }));
@@ -595,6 +603,54 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       }
     });
 
+    // Dedicated Audio Signaling (matching reference implementation)
+    socket.on('audio-offer', async ({ from, offer }) => {
+      const peer = createPeerConnection(from);
+      try {
+        if (peer.signalingState !== 'stable') {
+          await Promise.all([
+            peer.setLocalDescription({ type: 'rollback' }).catch(() => {}),
+          ]);
+        }
+        await peer.setRemoteDescription(new RTCSessionDescription(offer));
+        await flushQueuedIceCandidates(from, peer);
+        const answer = await peer.createAnswer();
+        await peer.setLocalDescription(answer);
+        socket.emit('answer', { to: from, answer });
+        socket.emit('audio-answer', { to: from, answer });
+      } catch (err) {
+        console.error('Failed to handle audio-offer:', err);
+      }
+    });
+
+    socket.on('audio-answer', async ({ from, answer }) => {
+      const peer = peersRef.current[from];
+      if (peer && peer.signalingState === 'have-local-offer') {
+        try {
+          await peer.setRemoteDescription(new RTCSessionDescription(answer));
+          await flushQueuedIceCandidates(from, peer);
+        } catch (err) {
+          console.error('Failed to set remote audio-answer:', err);
+        }
+      }
+    });
+
+    socket.on('audio-ice-candidate', async ({ from, candidate }) => {
+      const peer = peersRef.current[from];
+      if (peer && peer.remoteDescription && peer.remoteDescription.type) {
+        try {
+          await peer.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          console.error('Failed to add audio ice candidate:', err);
+        }
+      } else {
+        if (!iceCandidatesQueueRef.current[from]) {
+          iceCandidatesQueueRef.current[from] = [];
+        }
+        iceCandidatesQueueRef.current[from].push(candidate);
+      }
+    });
+
     // Participant state updates
     socket.on('participant-audio-toggle', ({ socketId, enabled }) => {
       setParticipants((prev) =>
@@ -602,9 +658,15 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       );
       if (remoteStreamsRef.current[socketId]) {
         const currentStream = remoteStreamsRef.current[socketId];
+        currentStream.getAudioTracks().forEach((t) => {
+          t.enabled = Boolean(enabled);
+        });
         const refreshed = new MediaStream(currentStream.getTracks());
         remoteStreamsRef.current[socketId] = refreshed;
         setRemoteStreams((prev) => ({ ...prev, [socketId]: refreshed }));
+        if (enabled) {
+          playRemoteAudio(socketId, refreshed);
+        }
       }
     });
 

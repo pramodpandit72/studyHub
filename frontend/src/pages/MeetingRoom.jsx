@@ -408,7 +408,7 @@ export const MeetingRoom = () => {
               {/* Side Filmstrip of Participant Cameras */}
               <div className="lg:w-64 flex lg:flex-col gap-3 overflow-x-auto lg:overflow-y-auto shrink-0 max-h-[220px] lg:max-h-full">
                 {/* Local Camera Tile */}
-                <div className="w-48 lg:w-full h-32 shrink-0">
+                <div className="w-48 lg:w-full aspect-video shrink-0">
                   <VideoTile
                     stream={localStream}
                     name={user?.name || 'You'}
@@ -424,7 +424,7 @@ export const MeetingRoom = () => {
                 {remoteParticipants
                   .filter((p) => !activeScreenShare || activeScreenShare.socketId !== p.socketId)
                   .map((participant) => (
-                    <div key={participant.socketId} className="w-48 lg:w-full h-32 shrink-0">
+                    <div key={participant.socketId} className="w-48 lg:w-full aspect-video shrink-0">
                       <VideoTile
                         stream={remoteStreams[participant.socketId] || null}
                         frame={remoteFrames[participant.socketId] || null}
@@ -441,32 +441,65 @@ export const MeetingRoom = () => {
             </div>
           ) : (
             /* Standard Grid Layout */
-            <div className={`grid ${gridClass} gap-3 sm:gap-4 w-full h-full max-h-[85vh]`}>
-              {/* Local Video Tile */}
-              <VideoTile
-                stream={localStream}
-                name={user?.name || 'You'}
-                role={user?.role}
-                isAudioEnabled={isAudioEnabled}
-                isVideoEnabled={isVideoEnabled}
-                isLocal={true}
-                isHost={isHost}
-              />
+            <div className="w-full h-full flex items-center justify-center min-h-0 overflow-hidden">
+              {totalTiles === 1 ? (
+                /* Single Tile (When meeting starts: Host or Local User) - Windows Laptop 16:9 Screen Ratio */
+                <div className="w-full h-full max-h-[calc(100vh-9.5rem)] flex items-center justify-center p-2 sm:p-4">
+                  <div
+                    className="w-full aspect-video max-h-[calc(100vh-9.5rem)] max-w-[calc((100vh-9.5rem)*16/9)] flex items-center justify-center"
+                    data-testid="single-meeting-video-container"
+                  >
+                    <VideoTile
+                      stream={localStream}
+                      name={user?.name || 'You'}
+                      role={user?.role}
+                      isAudioEnabled={isAudioEnabled}
+                      isVideoEnabled={isVideoEnabled}
+                      isLocal={true}
+                      isHost={isHost}
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Multi-participant Grid Layout - All tiles maintain 16:9 Windows laptop ratio with zero crop */
+                <div
+                  className={`grid ${gridClass} gap-3 sm:gap-4 w-full h-full max-h-[85vh] place-items-center overflow-y-auto p-2`}
+                >
+                  <div className="w-full aspect-video flex items-center justify-center">
+                    <VideoTile
+                      stream={localStream}
+                      name={user?.name || 'You'}
+                      role={user?.role}
+                      isAudioEnabled={isAudioEnabled}
+                      isVideoEnabled={isVideoEnabled}
+                      isLocal={true}
+                      isHost={isHost}
+                    />
+                  </div>
 
-              {/* Remote Video Tiles */}
-              {remoteParticipants.map((participant) => (
-                <VideoTile
-                  key={participant.socketId}
-                  stream={remoteStreams[participant.socketId] || null}
-                  frame={remoteFrames[participant.socketId] || null}
-                  name={participant.name || 'Participant'}
-                  role={participant.role || 'participant'}
-                  isAudioEnabled={participant.audio || false}
-                  isVideoEnabled={participant.video || false}
-                  isLocal={false}
-                  isHost={participant.isHost || participant.role === 'host' || participant.role === 'Teacher'}
-                />
-              ))}
+                  {remoteParticipants.map((participant) => (
+                    <div
+                      key={participant.socketId}
+                      className="w-full aspect-video flex items-center justify-center"
+                    >
+                      <VideoTile
+                        stream={remoteStreams[participant.socketId] || null}
+                        frame={remoteFrames[participant.socketId] || null}
+                        name={participant.name || 'Participant'}
+                        role={participant.role || 'participant'}
+                        isAudioEnabled={participant.audio || false}
+                        isVideoEnabled={participant.video || false}
+                        isLocal={false}
+                        isHost={
+                          participant.isHost ||
+                          participant.role === 'host' ||
+                          participant.role === 'Teacher'
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

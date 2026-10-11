@@ -399,7 +399,14 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: withVideo ? { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' } : false,
+        video: withVideo
+          ? {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              aspectRatio: { ideal: 1.7777777778 },
+              facingMode: 'user',
+            }
+          : false,
         audio: withAudio,
       });
 
@@ -898,7 +905,12 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
 
       // Re-acquire camera hardware track
       const videoStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          aspectRatio: { ideal: 1.7777777778 },
+          facingMode: 'user',
+        },
       });
       const newTrack = videoStream.getVideoTracks()[0];
       if (!newTrack) return;

@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Mic, MicOff, User, Volume2, Radio } from 'lucide-react';
 
 export const VideoTile = ({
@@ -10,6 +10,7 @@ export const VideoTile = ({
   isVideoEnabled = false,
   isLocal = false,
   isHost = false,
+  className = '',
 }) => {
   const videoRef = useRef(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -222,13 +223,13 @@ export const VideoTile = ({
 
   return (
     <div
-      className={`relative w-full h-full min-h-[200px] bg-neutral-950 rounded-xl overflow-hidden flex items-center justify-center border shadow-md group transition-all duration-200 ${
+      className={`relative w-full h-full aspect-video bg-neutral-950 rounded-xl overflow-hidden flex items-center justify-center border shadow-md group transition-all duration-200 ${
         isSpeaking
           ? 'border-emerald-500 ring-2 ring-emerald-500/80 shadow-[0_0_20px_rgba(16,185,129,0.3)]'
           : 'border-neutral-800'
-      }`}
+      } ${className}`}
     >
-      {/* Video Element - ALWAYS MUTED so video frames render immediately without autoplay blocking */}
+      {/* Video Element - ALWAYS MUTED so video frames render immediately without autoplay blocking, object-contain prevents any cropping */}
       <video
         ref={videoRef}
         autoPlay
@@ -236,23 +237,19 @@ export const VideoTile = ({
         muted
         onPlaying={() => setIsVideoPlaying(true)}
         onLoadedMetadata={() => setIsVideoPlaying(true)}
-        className={`w-full h-full ${
-          isPresenter ? 'object-contain' : 'object-cover'
-        } transition-opacity duration-200 ${
+        className={`w-full h-full object-contain transition-opacity duration-200 ${
           hasActiveWebRTCVideo
             ? 'opacity-100 relative z-10'
             : 'opacity-0 pointer-events-none absolute inset-0'
         } ${isLocal && !isPresenter ? 'scale-x-[-1]' : ''}`}
       />
 
-      {/* Fallback frame image from socket frame relay (renders when WebRTC video is connecting or across NAT) */}
+      {/* Fallback frame image from socket frame relay - object-contain prevents any cropping */}
       {frame && (
         <img
           src={frame}
           alt={name}
-          className={`w-full h-full ${
-            isPresenter ? 'object-contain' : 'object-cover'
-          } absolute inset-0 transition-opacity duration-200 ${
+          className={`w-full h-full object-contain absolute inset-0 transition-opacity duration-200 ${
             hasActiveWebRTCVideo ? 'opacity-0 pointer-events-none z-0' : 'opacity-100 z-10'
           }`}
         />

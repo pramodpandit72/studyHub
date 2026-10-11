@@ -1127,19 +1127,26 @@ export const useWebRTC = (roomId, meetingId, currentUser, callbacks = {}) => {
   }, []);
 
   // Send Chat Message
-  const sendMessage = useCallback((content) => {
-    if (!content.trim() || !socketRef.current) return;
+  const sendMessage = useCallback((content, file = null) => {
+    let textContent = '';
+    let fileData = null;
+
+    if (typeof content === 'object' && content !== null) {
+      textContent = content.text || content.content || content.message || '';
+      fileData = content.file || file || null;
+    } else {
+      textContent = content || '';
+      fileData = file || null;
+    }
+
+    if ((!textContent.trim() && !fileData) || !socketRef.current) return;
+
     socketRef.current.emit('send-message', {
       roomId,
-      message: {
-        id: Date.now().toString(),
-        sender: currentUser?.name || 'You',
-        senderId: currentUser?._id,
-        content: content.trim(),
-        timestamp: new Date().toISOString(),
-      },
+      message: textContent.trim(),
+      file: fileData,
     });
-  }, [roomId, currentUser]);
+  }, [roomId]);
 
   // Host Controls: Mute Participant
   const muteParticipant = useCallback((targetSocketId) => {

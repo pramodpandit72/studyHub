@@ -421,11 +421,17 @@ export const setupMeetingSocket = (io) => {
     });
 
     // Chat
-    socket.on('send-message', ({ roomId, message }) => {
+    socket.on('send-message', ({ roomId, message, file }) => {
+      const textMessage = typeof message === 'string'
+        ? message
+        : (message?.content || message?.message || message?.text || '');
+      const attachedFile = file || (typeof message === 'object' ? message?.file : null);
+
       io.to(roomId).emit('new-message', {
         id: Date.now().toString(),
         sender: { _id: socket.user._id, name: socket.user.name },
-        message,
+        message: textMessage,
+        file: attachedFile || null,
         timestamp: new Date().toISOString(),
       });
     });

@@ -37,6 +37,7 @@ const io = new Server(httpServer, {
     methods: ['GET', 'POST'],
     credentials: true,
   },
+  maxHttpBufferSize: 2e7,
   pingTimeout: 60000,
   pingInterval: 25000,
 });

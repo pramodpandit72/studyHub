@@ -264,3 +264,110 @@ describe('Frontend 8: Real-Time Poll Notification Trigger Logic', () => {
     );
   });
 });
+
+describe('Frontend 9: Chat File Sharing Classification & Payload Logic', () => {
+  const getFileTypeInfo = (file) => {
+    if (!file) return { category: 'file', label: 'FILE' };
+    const type = (file.type || '').toLowerCase();
+    const name = (file.name || '').toLowerCase();
+
+    if (type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(name)) {
+      return { category: 'image', label: 'IMG' };
+    }
+    if (type === 'application/pdf' || name.endsWith('.pdf')) {
+      return { category: 'pdf', label: 'PDF' };
+    }
+    if (
+      type.includes('msword') ||
+      type.includes('wordprocessingml') ||
+      /\.(docx?)$/i.test(name)
+    ) {
+      return { category: 'word', label: 'DOC' };
+    }
+    return { category: 'file', label: 'FILE' };
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  };
+
+  it('correctly classifies image files (PNG, JPG, WEBP)', () => {
+    assert.equal(getFileTypeInfo({ name: 'diagram.png', type: 'image/png' }).category, 'image');
+    assert.equal(getFileTypeInfo({ name: 'photo.JPEG', type: 'image/jpeg' }).category, 'image');
+    assert.equal(getFileTypeInfo({ name: 'graphic.webp', type: '' }).category, 'image');
+  });
+
+  it('correctly classifies PDF files', () => {
+    assert.equal(getFileTypeInfo({ name: 'lecture_notes.pdf', type: 'application/pdf' }).category, 'pdf');
+    assert.equal(getFileTypeInfo({ name: 'syllabus.pdf', type: '' }).label, 'PDF');
+  });
+
+  it('correctly classifies Word documents (.doc and .docx)', () => {
+    assert.equal(getFileTypeInfo({ name: 'assignment.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }).category, 'word');
+    assert.equal(getFileTypeInfo({ name: 'project_report.doc', type: 'application/msword' }).category, 'word');
+    assert.equal(getFileTypeInfo({ name: 'notes.DOCX', type: '' }).label, 'DOC');
+  });
+
+  it('correctly formats file sizes into human-readable strings', () => {
+    assert.equal(formatFileSize(0), '0 B');
+    assert.equal(formatFileSize(500), '500 B');
+    assert.equal(formatFileSize(1024), '1 KB');
+    assert.equal(formatFileSize(2.5 * 1024 * 1024), '2.5 MB');
+  });
+
+  it('validates file size within 10MB threshold', () => {
+    const MAX_SIZE = 10 * 1024 * 1024;
+    const isFileValid = (size) => size <= MAX_SIZE;
+
+    assert.equal(isFileValid(2 * 1024 * 1024), true); // 2 MB is allowed
+    assert.equal(isFileValid(10 * 1024 * 1024), true); // 10 MB is allowed
+    assert.equal(isFileValid(11 * 1024 * 1024), false); // 11 MB is rejected
+  });
+
+  it('normalizes chat message payload with both text and file attachment', () => {
+    const normalizePayload = (content, file = null) => {
+      let textContent = '';
+      let fileData = null;
+      if (typeof content === 'object' && content !== null) {
+        textContent = content.text || content.content || content.message || '';
+        fileData = content.file || file || null;
+      } else {
+        textContent = content || '';
+        fileData = file || null;
+      }
+      return {
+        message: textContent.trim(),
+        file: fileData,
+        hasContent: Boolean(textContent.trim() || fileData),
+      };
+    };
+
+    // Text only
+    const res1 = normalizePayload('Hello world');
+    assert.equal(res1.message, 'Hello world');
+    assert.equal(res1.file, null);
+    assert.equal(res1.hasContent, true);
+
+    // File only
+    const fileObj = { name: 'report.docx', size: 1024, type: 'application/msword', dataUrl: 'data:...' };
+    const res2 = normalizePayload({ text: '', file: fileObj });
+    assert.equal(res2.message, '');
+    assert.deepEqual(res2.file, fileObj);
+    assert.equal(res2.hasContent, true);
+
+    // Text + File
+    const res3 = normalizePayload({ text: 'Please find attached', file: fileObj });
+    assert.equal(res3.message, 'Please find attached');
+    assert.deepEqual(res3.file, fileObj);
+    assert.equal(res3.hasContent, true);
+
+    // Empty
+    const res4 = normalizePayload('');
+    assert.equal(res4.hasContent, false);
+  });
+});
+

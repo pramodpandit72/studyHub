@@ -312,7 +312,9 @@ export const VideoTile = ({
       ) : !hasAnyVideoContent && (
         <div className="flex flex-col items-center justify-center p-4">
           <div
-            className={`w-20 h-20 rounded-full bg-neutral-900 border-2 flex items-center justify-center text-white text-2xl font-bold shadow-inner transition-all duration-200 ${
+            className={`w-20 h-20 ${
+              isHost ? 'rounded-2xl' : 'rounded-full'
+            } bg-neutral-900 border-2 flex items-center justify-center text-white text-2xl font-bold shadow-inner transition-all duration-200 ${
               isSpeaking
                 ? 'border-emerald-500 scale-105 shadow-[0_0_15px_rgba(16,185,129,0.4)]'
                 : 'border-neutral-700'

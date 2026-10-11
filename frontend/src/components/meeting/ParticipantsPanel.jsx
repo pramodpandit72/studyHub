@@ -80,7 +80,12 @@ export const ParticipantsPanel = ({
               className="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700/60 transition"
             >
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="w-8 h-8 rounded-full bg-surface-200 dark:bg-surface-700 flex items-center justify-center font-medium text-xs text-text-primary shrink-0 border border-border-color">
+                <div
+                  className={`w-8 h-8 ${
+                    isParticipantHost ? 'rounded-lg' : 'rounded-full'
+                  } bg-surface-200 dark:bg-surface-700 flex items-center justify-center font-semibold text-xs text-text-primary shrink-0 border border-border-color shadow-2xs`}
+                  title={isParticipantHost ? 'Meeting Host' : 'Participant'}
+                >
                   {p.name ? p.name.charAt(0).toUpperCase() : 'U'}
                 </div>
                 <div className="truncate">

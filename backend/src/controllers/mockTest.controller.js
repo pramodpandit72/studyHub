@@ -458,11 +458,13 @@ export const saveSessionAnswer = async (req, res) => {
     const testId = req.params.id;
     const { questionIndex, selectedOption, currentQuestionIndex } = req.body;
 
-    const session = await MockTestAttempt.findOne({
+    const saveQuery = {
       user: req.user._id,
       mockTest: testId,
       status: { $in: ['in_progress', 'interrupted'] },
-    });
+    };
+    if (req.body.sessionId) saveQuery._id = req.body.sessionId;
+    const session = await MockTestAttempt.findOne(saveQuery).sort({ createdAt: -1 });
 
     if (!session) return sendError(res, 404, 'No active test session found.');
 
@@ -503,11 +505,13 @@ export const recordSessionActivity = async (req, res) => {
     const testId = req.params.id;
     const { type, leftAt, returnedAt, durationSeconds, details } = req.body;
 
-    const session = await MockTestAttempt.findOne({
+    const saveQuery = {
       user: req.user._id,
       mockTest: testId,
       status: { $in: ['in_progress', 'interrupted'] },
-    });
+    };
+    if (req.body.sessionId) saveQuery._id = req.body.sessionId;
+    const session = await MockTestAttempt.findOne(saveQuery).sort({ createdAt: -1 });
 
     if (!session) return sendError(res, 404, 'No active test session found.');
 
@@ -552,11 +556,13 @@ export const recordSessionActivity = async (req, res) => {
 export const resumeTestSession = async (req, res) => {
   try {
     const testId = req.params.id;
-    const session = await MockTestAttempt.findOne({
+    const saveQuery = {
       user: req.user._id,
       mockTest: testId,
       status: { $in: ['in_progress', 'interrupted'] },
-    });
+    };
+    if (req.body.sessionId) saveQuery._id = req.body.sessionId;
+    const session = await MockTestAttempt.findOne(saveQuery).sort({ createdAt: -1 });
 
     if (!session) return sendError(res, 404, 'No active test session available to resume.');
 
@@ -618,7 +624,7 @@ export const resumeTestSession = async (req, res) => {
         remainingSeconds,
         durationMinutes: session.durationMinutes,
         resumeCount: session.resumeCount,
-        maxResumesAllowed,
+        maxResumesAllowed: maxAllowed,
         resumesRemaining: Math.max(0, maxAllowed - session.resumeCount),
         savedAnswers: session.savedAnswers || {},
         currentQuestionIndex: session.currentQuestionIndex || 0,

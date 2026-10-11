@@ -443,3 +443,16 @@
     to { opacity: 1; transform: translateX(0); }
   }
 }
+
+/* Fullscreen Mock Test Anti-Cheating & Layout Isolation: Hide Navbar & Footer completely */
+:fullscreen nav,
+:-webkit-full-screen nav,
+:-moz-full-screen nav,
+:-ms-fullscreen nav {
+  display: none !important;
+}
+
+.fullscreen-active-layout nav,
+.fullscreen-active-layout footer {
+  display: none !important;
+}

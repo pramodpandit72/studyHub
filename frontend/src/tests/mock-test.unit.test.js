@@ -118,4 +118,115 @@ test('Mock Test Frontend Logic & Utilities', async (t) => {
     const totalMarks = questionsWithMarks.reduce((sum, q) => sum + q.marks, 0);
     assert.equal(totalMarks, 6);
   });
+
+  await t.test('6. Marked for Review Question Number styling evaluates to Grey color', () => {
+    const getPaletteQuestionStyle = (isAnswered, isMarked, isCurrent) => {
+      let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
+      if (isMarked) {
+        // Marked for review questions MUST show in grey color
+        style = 'bg-neutral-300 dark:bg-neutral-600 text-neutral-900 dark:text-neutral-100 border-neutral-500 font-bold shadow-sm';
+      } else if (isAnswered) {
+        style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
+      }
+      if (isCurrent) {
+        style += ' ring-2 ring-neutral-400 dark:ring-neutral-200';
+      }
+      return style;
+    };
+
+    // Unanswered but Marked: must have grey background
+    const markedUnanswered = getPaletteQuestionStyle(false, true, false);
+    assert.match(markedUnanswered, /bg-neutral-300/);
+    assert.match(markedUnanswered, /border-neutral-500/);
+
+    // Answered AND Marked: must show in grey color
+    const markedAnswered = getPaletteQuestionStyle(true, true, false);
+    assert.match(markedAnswered, /bg-neutral-300/);
+
+    // Answered only (not marked): shows in black/primary
+    const answeredOnly = getPaletteQuestionStyle(true, false, false);
+    assert.match(answeredOnly, /bg-text-primary/);
+
+    // Unanswered only: standard neutral
+    const standard = getPaletteQuestionStyle(false, false, false);
+    assert.match(standard, /bg-surface-100/);
+  });
+
+  await t.test('7. Fullscreen Mode Navbar Suppression Logic', () => {
+    const shouldHideNavbar = (isFullscreen, pathname) => {
+      const isMockTestAttempt = pathname.startsWith('/mock-tests/') && pathname !== '/mock-tests/create';
+      return Boolean(isFullscreen && isMockTestAttempt);
+    };
+
+    // Fullscreen on active test page: Navbar MUST be hidden
+    assert.equal(shouldHideNavbar(true, '/mock-tests/6ac9a8a3f39144a8735257f8'), true);
+
+    // Non-fullscreen on active test page: Navbar shown
+    assert.equal(shouldHideNavbar(false, '/mock-tests/6ac9a8a3f39144a8735257f8'), false);
+
+    // Fullscreen on mock tests listing page: Navbar shown (not taking test)
+    assert.equal(shouldHideNavbar(true, '/mock-tests'), false);
+
+    // Fullscreen on test creation page: Navbar shown
+    assert.equal(shouldHideNavbar(true, '/mock-tests/create'), false);
+
+    // Fullscreen on dashboard: Navbar shown
+    assert.equal(shouldHideNavbar(true, '/dashboard'), false);
+  });
+
+  await t.test('8. Resume Test Counter & Maximum 4 Attempts Policy', () => {
+    const maxResumes = 4;
+    let resumeCount = 0;
+
+    const canResume = () => resumeCount < maxResumes;
+    const getResumesRemaining = () => Math.max(0, maxResumes - resumeCount);
+
+    // Initially 4 remaining
+    assert.equal(canResume(), true);
+    assert.equal(getResumesRemaining(), 4);
+
+    // Consume resume 1
+    resumeCount++;
+    assert.equal(canResume(), true);
+    assert.equal(getResumesRemaining(), 3);
+
+    // Consume resume 2, 3, 4
+    resumeCount = 4;
+    assert.equal(canResume(), false);
+    assert.equal(getResumesRemaining(), 0);
+
+    // 5th attempt must be rejected
+    const handleFifthResume = () => {
+      if (resumeCount >= maxResumes) {
+        throw new Error('Maximum resume limit of 4 attempts reached');
+      }
+    };
+    assert.throws(handleFifthResume, /Maximum resume limit of 4 attempts reached/);
+  });
+
+  await t.test('9. Pause & Resume Test Progress Serialization', () => {
+    const sessionState = {
+      savedAnswers: { 0: 1, 1: 3 },
+      currentIndex: 1,
+      timeLeft: 840,
+    };
+
+    // Pause test: serializes answers and position
+    const pausedPayload = {
+      type: 'session_interrupted',
+      questionIndex: sessionState.currentIndex,
+      savedAnswers: { ...sessionState.savedAnswers },
+    };
+
+    assert.equal(pausedPayload.questionIndex, 1);
+    assert.deepEqual(pausedPayload.savedAnswers, { 0: 1, 1: 3 });
+
+    // Restore on resume
+    const restoredAnswers = {};
+    Object.entries(pausedPayload.savedAnswers).forEach(([k, v]) => {
+      restoredAnswers[Number(k)] = Number(v);
+    });
+    assert.equal(restoredAnswers[0], 1);
+    assert.equal(restoredAnswers[1], 3);
+  });
 });

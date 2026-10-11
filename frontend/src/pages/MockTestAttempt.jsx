@@ -51,6 +51,8 @@ export const MockTestAttempt = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showPauseModal, setShowPauseModal] = useState(false);
+  const [isPausing, setIsPausing] = useState(false);
   const [showMobilePalette, setShowMobilePalette] = useState(false);
   const [reviewFilter, setReviewFilter] = useState('all');
   const [result, setResult] = useState(null);
@@ -338,10 +340,18 @@ export const MockTestAttempt = () => {
   const handleResumeTest = async () => {
     try {
       setIsResuming(true);
-      await requestFullscreen();
+      // Safely attempt fullscreen without blocking resume API if browser restricts gesture
+      try {
+        await requestFullscreen();
+      } catch (fsErr) {
+        console.warn('Fullscreen entry on resume bypassed by browser:', fsErr);
+      }
 
-      const res = await mockTestApi.resumeSession(id);
-      const session = res.data.data.session;
+      const res = await mockTestApi.resumeSession(id, { sessionId: activeSession?._id });
+      const session = res.data?.data?.session;
+      if (!session) {
+        throw new Error('Session data could not be retrieved.');
+      }
       setActiveSession(session);
 
       const parsedAnswers = {};
@@ -373,9 +383,51 @@ export const MockTestAttempt = () => {
       success(`Session resumed successfully! (Attempt ${session.resumeCount} of ${session.maxResumesAllowed || 4})`);
     } catch (err) {
       console.error('Failed to resume session:', err);
-      error(err.response?.data?.message || 'Failed to resume test session.');
+      const msg = err.response?.data?.message || err.message || 'Failed to resume test session.';
+      error(msg);
+      // If session expired or invalid, re-check session status to update mode
+      if (err.response?.status === 400 || err.response?.status === 404) {
+        initPage().catch(() => {});
+      }
     } finally {
       setIsResuming(false);
+    }
+  };
+
+  const handlePauseAndSave = async () => {
+    try {
+      setIsPausing(true);
+      if (timerRef.current) clearInterval(timerRef.current);
+
+      await mockTestApi.recordSessionActivity(id, {
+        type: 'session_interrupted',
+        leftAt: new Date().toISOString(),
+        details: 'Candidate paused test to resume later',
+        sessionId: activeSession?._id,
+      }).catch(() => {});
+
+      if (selectedAnswers[currentIndex] !== undefined) {
+        await mockTestApi.saveSessionAnswer(id, {
+          questionIndex: currentIndex,
+          selectedOption: selectedAnswers[currentIndex],
+          currentQuestionIndex: currentIndex,
+          sessionId: activeSession?._id,
+        }).catch(() => {});
+      }
+
+      if (document.fullscreenElement) {
+        await exitFullscreen().catch(() => {});
+      }
+
+      setShowPauseModal(false);
+      info('Test session paused and saved. You can resume at any time.');
+      await initPage();
+    } catch (err) {
+      console.error('Error pausing session:', err);
+      setShowPauseModal(false);
+      navigate('/mock-tests');
+    } finally {
+      setIsPausing(false);
     }
   };
 
@@ -1225,7 +1277,7 @@ export const MockTestAttempt = () => {
         </div>
       )}
 
-      <div className="card p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sticky top-16 z-20 backdrop-blur-md bg-surface-0/95 dark:bg-surface-900/95 shadow-sm">
+      <div className="card p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sticky z-20 ${isFullscreen ? 'top-0' : 'top-16'} backdrop-blur-md bg-surface-0/95 dark:bg-surface-900/95 shadow-sm">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color">
@@ -1290,6 +1342,19 @@ export const MockTestAttempt = () => {
           >
             <LayoutGrid size={15} />
             <span>{attemptedCount}/{totalQuestions}</span>
+          </button>
+
+          {/* Pause & Resume Option */}
+          <button
+            type="button"
+            id="pause-resume-test-button"
+            onClick={() => setShowPauseModal(true)}
+            className="btn btn-secondary btn-sm flex items-center gap-1.5 touch-manipulation text-xs font-semibold"
+            title="Pause and save test progress to resume later"
+          >
+            <RotateCcw size={13} />
+            <span className="hidden sm:inline">Pause & Resume</span>
+            <span className="sm:hidden">Pause</span>
           </button>
 
           <div
@@ -1462,10 +1527,10 @@ export const MockTestAttempt = () => {
               <span>Unanswered ({unattemptedCount})</span>
             </div>
             <div className="flex items-center gap-1.5 col-span-2 pt-0.5">
-              <span className="w-3 h-3 rounded bg-surface-200 dark:bg-surface-700 border border-neutral-400 flex items-center justify-center shrink-0">
-                <Bookmark size={8} className="fill-current text-text-primary" />
+              <span className="w-3.5 h-3.5 rounded bg-neutral-300 dark:bg-neutral-600 border border-neutral-500 flex items-center justify-center shrink-0">
+                <Bookmark size={8} className="fill-current text-neutral-900 dark:text-neutral-100" />
               </span>
-              <span>Marked for Review ({markedCount})</span>
+              <span className="font-semibold text-text-primary">Marked for Review (Grey) ({markedCount})</span>
             </div>
           </div>
 
@@ -1520,12 +1585,11 @@ export const MockTestAttempt = () => {
                 const isCurrent = currentIndex === qIdx;
 
                 let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
-                if (isAnswered && isMarked) {
-                  style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
+                if (isMarked) {
+                  // Marked for review questions MUST show in grey color as requested
+                  style = 'bg-neutral-300 dark:bg-neutral-600 text-neutral-900 dark:text-neutral-100 border-neutral-500 font-bold shadow-sm';
                 } else if (isAnswered) {
                   style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
-                } else if (isMarked) {
-                  style = 'bg-surface-200 dark:bg-surface-700 text-text-primary border-neutral-400 font-bold';
                 }
                 if (isCurrent) {
                   style += ' ring-2 ring-neutral-400 dark:ring-neutral-200';
@@ -1538,9 +1602,9 @@ export const MockTestAttempt = () => {
                     onClick={() => setCurrentIndex(qIdx)}
                     className={`h-9 rounded-lg border font-mono text-xs transition flex items-center justify-center relative touch-manipulation active:scale-95 ${style}`}
                   >
-                    <span>{qIdx + 1}</span>
+                    <span className={isMarked ? 'text-neutral-900 dark:text-neutral-100 font-extrabold' : ''}>{qIdx + 1}</span>
                     {isMarked && (
-                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-900 border border-neutral-400" />
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-neutral-100" />
                     )}
                   </button>
                 );
@@ -1645,10 +1709,10 @@ export const MockTestAttempt = () => {
                 <span>Unans ({unattemptedCount})</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-surface-200 dark:bg-surface-700 border border-neutral-400 flex items-center justify-center shrink-0">
-                  <Bookmark size={7} className="fill-current text-text-primary" />
+                <span className="w-3.5 h-3.5 rounded bg-neutral-300 dark:bg-neutral-600 border border-neutral-500 flex items-center justify-center shrink-0">
+                  <Bookmark size={7} className="fill-current text-neutral-900 dark:text-neutral-100" />
                 </span>
-                <span>Marked ({markedCount})</span>
+                <span className="font-semibold text-text-primary">Marked (Grey) ({markedCount})</span>
               </div>
             </div>
 
@@ -1660,12 +1724,10 @@ export const MockTestAttempt = () => {
                   const isCurrent = currentIndex === qIdx;
 
                   let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
-                  if (isAnswered && isMarked) {
-                    style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
+                  if (isMarked) {
+                    style = 'bg-neutral-300 dark:bg-neutral-600 text-neutral-900 dark:text-neutral-100 border-neutral-500 font-bold shadow-sm';
                   } else if (isAnswered) {
                     style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
-                  } else if (isMarked) {
-                    style = 'bg-surface-200 dark:bg-surface-700 text-text-primary border-neutral-400 font-bold';
                   }
                   if (isCurrent) {
                     style += ' ring-2 ring-neutral-400 dark:ring-neutral-200';
@@ -1681,9 +1743,9 @@ export const MockTestAttempt = () => {
                       }}
                       className={`h-11 rounded-lg border font-mono text-xs font-semibold transition flex items-center justify-center relative touch-manipulation active:scale-95 ${style}`}
                     >
-                      <span>{qIdx + 1}</span>
+                      <span className={isMarked ? 'text-neutral-900 dark:text-neutral-100 font-extrabold' : ''}>{qIdx + 1}</span>
                       {isMarked && (
-                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-900 border border-neutral-400" />
+                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-neutral-100" />
                       )}
                     </button>
                   );
@@ -1709,6 +1771,73 @@ export const MockTestAttempt = () => {
               >
                 <Send size={14} />
                 <span>Submit Test</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pause & Resume Later Confirmation Modal */}
+      {showPauseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="card max-w-md w-full p-6 space-y-5 border-neutral-500 shadow-xl bg-surface-0 dark:bg-surface-900">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-surface-100 dark:bg-surface-800 border border-border-color text-text-primary">
+                <RotateCcw size={22} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">
+                  Pause Test & Resume Later?
+                </h3>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  Your current answers and remaining time will be safely saved on the server.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-lg bg-surface-50 dark:bg-surface-800/60 border border-border-color text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="text-text-secondary">Saved Answers:</span>
+                <span className="font-mono font-bold text-text-primary">
+                  {Object.keys(selectedAnswers).length} of {test.questions?.length}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-secondary">Remaining Time:</span>
+                <span className="font-mono font-bold text-text-primary">
+                  {formatTimer(timeLeft)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-secondary">Resumes Remaining:</span>
+                <span className="font-mono font-bold text-text-primary">
+                  {resumesRemaining} of {maxResumes}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              When ready, return to this mock test and click <strong>"Resume Test"</strong> to continue where you left off.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-color">
+              <button
+                type="button"
+                onClick={() => setShowPauseModal(false)}
+                disabled={isPausing}
+                className="btn btn-secondary btn-sm"
+              >
+                Continue Exam
+              </button>
+              <button
+                type="button"
+                id="confirm-pause-button"
+                onClick={handlePauseAndSave}
+                disabled={isPausing}
+                className="btn btn-primary btn-sm flex items-center gap-1.5"
+              >
+                <RotateCcw size={14} />
+                <span>{isPausing ? 'Saving Progress...' : 'Pause & Save Session'}</span>
               </button>
             </div>
           </div>

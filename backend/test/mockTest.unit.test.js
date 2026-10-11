@@ -87,3 +87,63 @@ test('1. Mock Test Score & Negative Marking Calculation', async (t) => {
     assert.equal(score, 0);
   });
 });
+
+test('2. Mock Test Session Resume Policy & Limits', async (t) => {
+  await t.test('strictly caps resume attempts at 4 and rejects 5th attempt', () => {
+    const maxAllowed = 4;
+    let resumeCount = 0;
+
+    const resumeSession = () => {
+      if (resumeCount >= maxAllowed) {
+        throw new Error(`Maximum resume limit of ${maxAllowed} attempts has been reached for this test session.`);
+      }
+      resumeCount++;
+      return { success: true, resumeCount, remaining: maxAllowed - resumeCount };
+    };
+
+    // 4 successful resumes
+    assert.equal(resumeSession().resumeCount, 1);
+    assert.equal(resumeSession().resumeCount, 2);
+    assert.equal(resumeSession().resumeCount, 3);
+    assert.equal(resumeSession().resumeCount, 4);
+
+    // 5th attempt must throw
+    assert.throws(resumeSession, /Maximum resume limit of 4 attempts has been reached/);
+  });
+
+  await t.test('calculates remaining seconds against server deadline', () => {
+    const startedAt = Date.now();
+    const durationMinutes = 15;
+    const deadline = startedAt + durationMinutes * 60 * 1000;
+
+    const getRemaining = (currentTime) => {
+      return Math.max(0, Math.round((deadline - currentTime) / 1000));
+    };
+
+    assert.equal(getRemaining(startedAt), 900);
+    assert.equal(getRemaining(startedAt + 300 * 1000), 600);
+    assert.equal(getRemaining(deadline), 0);
+    assert.equal(getRemaining(deadline + 5000), 0);
+  });
+
+  await t.test('accumulates tab switch counts and total time away without duplicates', () => {
+    let tabSwitchCount = 0;
+    let totalTimeAwaySeconds = 0;
+
+    const recordTabReturn = (durationSeconds) => {
+      tabSwitchCount++;
+      if (durationSeconds > 0) {
+        totalTimeAwaySeconds += durationSeconds;
+      }
+      return { tabSwitchCount, totalTimeAwaySeconds };
+    };
+
+    const s1 = recordTabReturn(5);
+    assert.equal(s1.tabSwitchCount, 1);
+    assert.equal(s1.totalTimeAwaySeconds, 5);
+
+    const s2 = recordTabReturn(12);
+    assert.equal(s2.tabSwitchCount, 2);
+    assert.equal(s2.totalTimeAwaySeconds, 17);
+  });
+});

@@ -4,6 +4,7 @@ import { mockTestApi } from '../services/mockTest.api';
 import { PageLoader } from '../components/common/Loader';
 import { useToast } from '../context/ToastContext';
 import {
+  Calendar,
   Clock,
   CheckCircle2,
   AlertCircle,
@@ -64,6 +65,9 @@ export const MockTestAttempt = () => {
   const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
   const [showAwayBanner, setShowAwayBanner] = useState(false);
   const [lastAwayDuration, setLastAwayDuration] = useState(0);
+  const [showExitFullscreenModal, setShowExitFullscreenModal] = useState(false);
+  const [showWindowSwitchModal, setShowWindowSwitchModal] = useState(false);
+  const [windowSwitchIncident, setWindowSwitchIncident] = useState(0);
   const [sessionMeta, setSessionMeta] = useState({
     resumeCount: 0,
     maxResumesAllowed: 4,
@@ -2198,3 +2202,5 @@ export const MockTestAttempt = () => {
     </div>
   );
 };
+
+export default MockTestAttempt;

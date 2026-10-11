@@ -317,7 +317,7 @@ export const MockTests = () => {
                     </div>
 
                     {/* Start Button */}
-                    <div className="pt-2">
+                    <div className="pt-2 space-y-1.5">
                       <Link
                         to={`/mock-tests/${test._id}`}
                         className="btn btn-primary btn-sm w-full justify-center group-hover:shadow transition"
@@ -325,6 +325,9 @@ export const MockTests = () => {
                         <span>Start Test</span>
                         <ArrowRight size={14} />
                       </Link>
+                      <p className="text-[10px] text-text-secondary text-center">
+                        Instructions & fullscreen checklist before timer starts
+                      </p>
                     </div>
                   </div>
                 );

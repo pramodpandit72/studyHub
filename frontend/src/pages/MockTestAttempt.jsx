@@ -81,6 +81,32 @@ export const MockTestAttempt = () => {
     };
   }, [id, viewAttemptId]);
 
+  // Global fullscreen state watcher across all modes (instructions, resume, testing)
+  useEffect(() => {
+    const updateFsState = () => {
+      const isFs = Boolean(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+      setIsFullscreen(isFs);
+    };
+
+    updateFsState();
+    document.addEventListener('fullscreenchange', updateFsState);
+    document.addEventListener('webkitfullscreenchange', updateFsState);
+    document.addEventListener('mozfullscreenchange', updateFsState);
+    document.addEventListener('MSFullscreenChange', updateFsState);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', updateFsState);
+      document.removeEventListener('webkitfullscreenchange', updateFsState);
+      document.removeEventListener('mozfullscreenchange', updateFsState);
+      document.removeEventListener('MSFullscreenChange', updateFsState);
+    };
+  }, []);
+
   useEffect(() => {
     if (mode !== 'testing' || result) return;
 
@@ -563,6 +589,47 @@ export const MockTestAttempt = () => {
             </ul>
           </div>
 
+          {/* Dedicated Fullscreen Anti-Cheating Control Card */}
+          <div className="p-4 rounded-xl border border-border-color bg-surface-50 dark:bg-surface-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
+                  <Maximize2 size={14} /> Fullscreen Mode Anti-Cheating Control
+                </span>
+                {isFullscreen ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-surface-200 dark:bg-surface-700 text-text-primary border border-border-color flex items-center gap-1">
+                    <CheckCircle2 size={12} /> Fullscreen Mode Active
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-text-secondary border border-border-color">
+                    Standard Window
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-text-secondary leading-relaxed">
+                {isFullscreen
+                  ? 'Your screen is currently in Fullscreen mode. Anti-cheating fullscreen protocol is active.'
+                  : 'Click below to switch to Fullscreen mode now, or proceed to start exam with automatic fullscreen expansion.'}
+              </p>
+            </div>
+
+            <div className="shrink-0 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                id="instructions-fullscreen-toggle"
+                className={`btn btn-sm flex items-center justify-center gap-1.5 font-semibold text-xs shadow-sm ${
+                  isFullscreen
+                    ? 'btn-secondary text-text-primary'
+                    : 'bg-neutral-900 text-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 border-text-primary hover:opacity-90'
+                }`}
+              >
+                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                <span>{isFullscreen ? 'Exit Fullscreen' : 'Enable Fullscreen Mode'}</span>
+              </button>
+            </div>
+          </div>
+
           <div className="p-4 rounded-xl bg-surface-100 dark:bg-surface-800 border border-border-color space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
               <CheckCircle2 size={15} /> Candidate Declaration & Undertaking
@@ -579,7 +646,7 @@ export const MockTestAttempt = () => {
                   onChange={(e) => setEnableFullscreenPref(e.target.checked)}
                   className="w-4 h-4 rounded border-border-color text-text-primary focus:ring-0 cursor-pointer"
                 />
-                <span><strong>Enable Fullscreen Mode upon starting exam</strong> (Recommended for testing integrity)</span>
+                <span><strong>Automatically engage Fullscreen Mode upon starting exam</strong> (Recommended for anti-cheating)</span>
               </label>
 
               <label className="flex items-start gap-2.5 text-xs text-text-primary cursor-pointer select-none">
@@ -606,21 +673,35 @@ export const MockTestAttempt = () => {
               Cancel
             </button>
 
-            <button
-              type="button"
-              onClick={handleStartTest}
-              disabled={!acknowledgedInstructions || isSubmitting}
-              className="btn btn-primary btn-sm w-full sm:w-auto flex items-center justify-center gap-2 disabled:opacity-40"
-            >
-              <Maximize2 size={15} />
-              <span>
-                {isSubmitting
-                  ? 'Starting Session...'
-                  : enableFullscreenPref
-                  ? 'Enable Fullscreen & Start Test'
-                  : 'Start Test'}
-              </span>
-            </button>
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
+              {!isFullscreen && (
+                <button
+                  type="button"
+                  onClick={requestFullscreen}
+                  className="btn btn-secondary btn-sm w-full sm:w-auto flex items-center justify-center gap-1.5 text-xs font-semibold"
+                  title="Enter fullscreen mode now"
+                >
+                  <Maximize2 size={14} />
+                  <span>Enable Fullscreen</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                id="start-exam-button"
+                onClick={handleStartTest}
+                disabled={!acknowledgedInstructions || isSubmitting}
+                className="btn btn-primary btn-sm w-full sm:w-auto flex items-center justify-center gap-2 disabled:opacity-40"
+              >
+                <Send size={14} />
+                <span>
+                  {isSubmitting
+                    ? 'Starting Exam...'
+                    : 'Start Exam & Begin Timer'}
+                </span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -702,17 +783,30 @@ export const MockTestAttempt = () => {
               Back to Mock Tests
             </button>
 
-            {canResume ? (
-              <button
-                type="button"
-                onClick={handleResumeTest}
-                disabled={isResuming}
-                className="btn btn-primary btn-sm w-full sm:w-auto flex items-center justify-center gap-2"
-              >
-                <RotateCcw size={14} />
-                <span>{isResuming ? 'Resuming Session...' : `Resume Test (${resumesRemaining} Remaining)`}</span>
-              </button>
-            ) : (
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
+              {!isFullscreen && (
+                <button
+                  type="button"
+                  onClick={requestFullscreen}
+                  className="btn btn-secondary btn-sm w-full sm:w-auto flex items-center justify-center gap-1.5 text-xs font-semibold"
+                  title="Enter fullscreen mode before resuming"
+                >
+                  <Maximize2 size={14} />
+                  <span>Enable Fullscreen</span>
+                </button>
+              )}
+
+              {canResume ? (
+                <button
+                  type="button"
+                  onClick={handleResumeTest}
+                  disabled={isResuming}
+                  className="btn btn-primary btn-sm w-full sm:w-auto flex items-center justify-center gap-2"
+                >
+                  <RotateCcw size={14} />
+                  <span>{isResuming ? 'Resuming Session...' : `Resume Test (${resumesRemaining} Remaining)`}</span>
+                </button>
+              ) : (
               <button
                 type="button"
                 onClick={submitTestInternal}
@@ -723,6 +817,7 @@ export const MockTestAttempt = () => {
                 <span>{isSubmitting ? 'Evaluating...' : 'Submit Saved Answers'}</span>
               </button>
             )}
+            </div>
           </div>
         </div>
       </div>
@@ -1111,20 +1206,21 @@ export const MockTestAttempt = () => {
         </div>
       )}
 
-      {showFullscreenWarning && !isFullscreen && (
-        <div className="p-3.5 rounded-xl border border-neutral-500 bg-surface-200 dark:bg-surface-800 text-xs text-text-primary flex items-center justify-between gap-3 animate-in fade-in duration-200">
+      {!isFullscreen && (
+        <div className="p-3.5 rounded-xl border border-neutral-500 bg-surface-200 dark:bg-surface-800 text-xs text-text-primary flex items-center justify-between gap-3 animate-in fade-in duration-200 shadow-sm">
           <div className="flex items-center gap-2">
-            <Minimize2 size={16} className="text-text-secondary shrink-0" />
+            <ShieldAlert size={16} className="text-text-primary shrink-0" />
             <span>
-              <strong>Fullscreen Exited:</strong> Please re-enter fullscreen mode to maintain standard testing conditions.
+              <strong>Fullscreen Mode Inactive:</strong> Please switch to fullscreen mode to maintain standard testing conditions and avoid anti-cheating activity flags.
             </span>
           </div>
           <button
+            type="button"
             onClick={requestFullscreen}
-            className="btn btn-secondary btn-sm text-xs flex items-center gap-1.5 shrink-0"
+            className="btn btn-primary btn-sm text-xs flex items-center gap-1.5 shrink-0"
           >
             <Maximize2 size={13} />
-            <span>Re-enter Fullscreen</span>
+            <span>Enable Fullscreen Mode</span>
           </button>
         </div>
       )}
@@ -1174,17 +1270,17 @@ export const MockTestAttempt = () => {
           {/* Prominent Fullscreen Mode Button */}
           <button
             type="button"
+            id="active-test-fullscreen-button"
             onClick={toggleFullscreen}
             className={`btn btn-sm flex items-center gap-1.5 touch-manipulation text-xs font-semibold ${
               isFullscreen
                 ? 'btn-secondary text-text-primary'
-                : 'bg-neutral-800 text-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 border-text-primary shadow-sm'
+                : 'bg-neutral-900 text-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 border-text-primary shadow-sm ring-1 ring-neutral-400'
             }`}
-            title={isFullscreen ? 'Exit Fullscreen' : 'Enable Fullscreen Mode'}
+            title={isFullscreen ? 'Exit Fullscreen Mode' : 'Enable Fullscreen Mode'}
           >
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            <span className="hidden sm:inline">{isFullscreen ? 'Exit Fullscreen' : 'Enable Fullscreen'}</span>
-            <span className="sm:hidden">{isFullscreen ? 'Exit FS' : 'Fullscreen'}</span>
+            <span>{isFullscreen ? 'Exit Fullscreen' : 'Enable Fullscreen'}</span>
           </button>
 
           <button

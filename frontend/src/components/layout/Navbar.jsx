@@ -10,7 +10,6 @@ import {
   User,
   LayoutDashboard,
   ClipboardList,
-  PlusCircle,
   Menu,
   X
 } from 'lucide-react';
@@ -98,16 +97,7 @@ export const Navbar = () => {
 
             {isAuthenticated ? (
               <div className="hidden sm:flex items-center gap-2.5">
-                {/* Single, non-duplicate primary CTA for creating meetings */}
-                <Link
-                  to="/meetings/create"
-                  className="btn btn-primary btn-sm flex items-center gap-1.5"
-                >
-                  <PlusCircle size={15} />
-                  <span>Create Meeting</span>
-                </Link>
-
-                <div className="h-5 w-px bg-border-color mx-1" />
+                
 
                 <Link
                   to="/profile"
@@ -217,14 +207,6 @@ export const Navbar = () => {
               </button>
 
               <div className="pt-3 border-t border-border-color flex flex-col gap-2">
-                <Link
-                  to="/meetings/create"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="btn btn-primary btn-sm w-full justify-center"
-                >
-                  <PlusCircle size={16} />
-                  <span>Create Meeting</span>
-                </Link>
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);

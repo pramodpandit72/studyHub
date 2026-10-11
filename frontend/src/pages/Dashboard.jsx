@@ -135,7 +135,7 @@ export const Dashboard = () => {
           <div className="mt-4 pt-3 border-t border-border-color">
             <Link
               to="/meetings/create?type=scheduled"
-              className="btn btn-primary btn-sm w-full justify-center"
+              className="btn btn-secondary btn-sm w-full justify-center"
             >
               Schedule Meeting
             </Link>

@@ -563,7 +563,7 @@ export const MeetingRoom = () => {
         isParticipantsOpen={isParticipantsOpen}
         isPollOpen={isPollOpen}
         hasActivePoll={Boolean(activePoll?.isActive)}
-        participantCount={participants.length + 1}
+        participantCount={Math.max(1, participants.length)}
         isHost={isHost}
         onToggleAudio={toggleAudio}
         onToggleVideo={toggleVideo}

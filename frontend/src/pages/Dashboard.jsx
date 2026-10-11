@@ -13,6 +13,7 @@ import {
   Check,
   ArrowRight,
   GraduationCap,
+  ClipboardList,
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
@@ -116,32 +117,7 @@ export const Dashboard = () => {
 
       {/* Primary Action Section: Exactly Three Main Action Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* 1. Start Instant Meeting */}
-        <div className="card p-5 hover:border-neutral-500 transition group flex flex-col justify-between">
-          <div className="flex items-start gap-4">
-            <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform shrink-0">
-              <Video size={22} />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-text-primary">
-                Start Instant Meeting
-              </h2>
-              <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                Start a live meeting immediately and share the meeting code with others.
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-border-color">
-            <Link
-              to="/meetings/create?type=instant"
-              className="btn btn-primary btn-sm w-full justify-center"
-            >
-              Start Instant Meeting
-            </Link>
-          </div>
-        </div>
-
-        {/* 2. Schedule Meeting */}
+        {/* 1. Schedule Meeting */}
         <div className="card p-5 hover:border-neutral-500 transition group flex flex-col justify-between">
           <div className="flex items-start gap-4">
             <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform shrink-0">
@@ -152,21 +128,21 @@ export const Dashboard = () => {
                 Schedule Meeting
               </h2>
               <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                Schedule a meeting for a future date and time.
+                Schedule a meeting for a future date and time, or start an instant meeting.
               </p>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-border-color">
             <Link
               to="/meetings/create?type=scheduled"
-              className="btn btn-secondary btn-sm w-full justify-center"
+              className="btn btn-primary btn-sm w-full justify-center"
             >
               Schedule Meeting
             </Link>
           </div>
         </div>
 
-        {/* 3. Mock Test */}
+        {/* 2. Mock Test */}
         <div className="card p-5 hover:border-neutral-500 transition group flex flex-col justify-between">
           <div className="flex items-start gap-4">
             <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform shrink-0">
@@ -187,6 +163,31 @@ export const Dashboard = () => {
               className="btn btn-secondary btn-sm w-full justify-center"
             >
               Take Mock Test
+            </Link>
+          </div>
+        </div>
+
+        {/* 3. Attendance */}
+        <div className="card p-5 hover:border-neutral-500 transition group flex flex-col justify-between">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color group-hover:scale-105 transition-transform shrink-0">
+              <ClipboardList size={22} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-text-primary">
+                Attendance
+              </h2>
+              <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                Track automated meeting attendance, view participant join logs, and download records.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-border-color">
+            <Link
+              to="/attendance"
+              className="btn btn-secondary btn-sm w-full justify-center"
+            >
+              View Attendance
             </Link>
           </div>
         </div>

@@ -27,37 +27,38 @@ test('Navigation and Dashboard Spec Verification', async (t) => {
     const dashboardCards = [
       {
         order: 1,
-        title: 'Start Instant Meeting',
-        description: 'Start a live meeting immediately and share the meeting code with others.',
-        buttonText: 'Start Instant Meeting',
-        to: '/meetings/create?type=instant',
-      },
-      {
-        order: 2,
         title: 'Schedule Meeting',
-        description: 'Schedule a meeting for a future date and time.',
+        description: 'Schedule a meeting for a future date and time, or start an instant meeting.',
         buttonText: 'Schedule Meeting',
         to: '/meetings/create?type=scheduled',
       },
       {
-        order: 3,
+        order: 2,
         title: 'Mock Test',
         description: 'Attempt practice tests for government exams and other competitive examinations, and review your score.',
         buttonText: 'Take Mock Test',
         to: '/mock-tests',
       },
+      {
+        order: 3,
+        title: 'Attendance',
+        description: 'Track automated meeting attendance, view participant join logs, and download records.',
+        buttonText: 'View Attendance',
+        to: '/attendance',
+      },
     ];
 
     assert.equal(dashboardCards.length, 3, 'Dashboard must have exactly three action cards');
-    assert.equal(dashboardCards[0].title, 'Start Instant Meeting');
-    assert.equal(dashboardCards[1].title, 'Schedule Meeting');
-    assert.equal(dashboardCards[2].title, 'Mock Test');
+    assert.equal(dashboardCards[0].title, 'Schedule Meeting');
+    assert.equal(dashboardCards[1].title, 'Mock Test');
+    assert.equal(dashboardCards[2].title, 'Attendance');
 
-    assert.equal(dashboardCards[0].buttonText, 'Start Instant Meeting');
-    assert.equal(dashboardCards[1].buttonText, 'Schedule Meeting');
-    assert.equal(dashboardCards[2].buttonText, 'Take Mock Test');
+    assert.equal(dashboardCards[0].buttonText, 'Schedule Meeting');
+    assert.equal(dashboardCards[1].buttonText, 'Take Mock Test');
+    assert.equal(dashboardCards[2].buttonText, 'View Attendance');
 
     const cardTitles = dashboardCards.map((c) => c.title);
-    assert.equal(cardTitles.includes('Attendance Records'), false, 'Attendance must not be in primary action section');
+    assert.equal(cardTitles.includes('Start Instant Meeting'), false, 'Start Instant Meeting must not be in dashboard grid');
+    assert.equal(cardTitles.includes('Attendance'), true, 'Attendance must be present after Mock Test');
   });
 });

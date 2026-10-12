@@ -84,6 +84,8 @@ export const MockTestAttempt = () => {
   const serverDeadlineRef = useRef(null);
   const awayStartTimeRef = useRef(null);
   const isAwayRef = useRef(false);
+  const wasFullscreenRef = useRef(false);
+  const resumeGracePeriodRef = useRef(false);
 
   useEffect(() => {
     initPage();
@@ -201,11 +203,17 @@ export const MockTestAttempt = () => {
         document.mozFullScreenElement ||
         document.msFullscreenElement
       );
+      const wasFs = wasFullscreenRef.current;
+      wasFullscreenRef.current = isFs;
       setIsFullscreen(isFs);
 
       if (!isFs) {
         setShowFullscreenWarning(true);
-        setShowExitFullscreenModal(true);
+        // Only trigger exit fullscreen request modal if user was genuinely in fullscreen during this test session
+        // and actively left it, NOT upon starting/resuming or during grace period!
+        if (wasFs && !resumeGracePeriodRef.current) {
+          setShowExitFullscreenModal(true);
+        }
         mockTestApi.recordSessionActivity(id, {
           type: 'fullscreen_exit',
           leftAt: new Date().toISOString(),
@@ -374,10 +382,20 @@ export const MockTestAttempt = () => {
       setTimeLeft(initialRemaining);
 
       startCountdown(deadlineMs);
+      setShowExitFullscreenModal(false);
+      setShowFullscreenWarning(false);
+      setShowWindowSwitchModal(false);
+      setShowAwayBanner(false);
+      setShowPauseModal(false);
+      resumeGracePeriodRef.current = true;
       setMode('testing');
+      setTimeout(() => {
+        resumeGracePeriodRef.current = false;
+      }, 4000);
       success('Mock test officially started. Good luck!');
     } catch (err) {
       console.error('Failed to start test session:', err);
+      resumeGracePeriodRef.current = false;
       error(err.response?.data?.message || 'Failed to start test session.');
     } finally {
       setIsSubmitting(false);
@@ -387,6 +405,13 @@ export const MockTestAttempt = () => {
   const handleResumeTest = async () => {
     try {
       setIsResuming(true);
+      resumeGracePeriodRef.current = true;
+      setShowExitFullscreenModal(false);
+      setShowFullscreenWarning(false);
+      setShowWindowSwitchModal(false);
+      setShowAwayBanner(false);
+      setShowPauseModal(false);
+
       // Safely attempt fullscreen without blocking resume API if browser restricts gesture
       try {
         await requestFullscreen();
@@ -426,10 +451,21 @@ export const MockTestAttempt = () => {
       setTimeLeft(initialRemaining);
 
       startCountdown(deadlineMs);
+      setShowExitFullscreenModal(false);
+      setShowFullscreenWarning(false);
+      setShowWindowSwitchModal(false);
+      setShowAwayBanner(false);
+      setShowPauseModal(false);
       setMode('testing');
+
+      setTimeout(() => {
+        resumeGracePeriodRef.current = false;
+      }, 4000);
+
       success(`Session resumed successfully! (Attempt ${session.resumeCount} of ${session.maxResumesAllowed || 4})`);
     } catch (err) {
       console.error('Failed to resume session:', err);
+      resumeGracePeriodRef.current = false;
       const msg = err.response?.data?.message || err.message || 'Failed to resume test session.';
       error(msg);
       // If session expired or invalid, re-check session status to update mode

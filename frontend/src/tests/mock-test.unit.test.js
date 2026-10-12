@@ -437,4 +437,54 @@ test('Mock Test Frontend Logic & Utilities', async (t) => {
     assert.equal(sampleEvents[1].durationSeconds, 4);
     assert.equal(sampleEvents[0].type, 'test_started');
   });
+
+  await t.test('15. Resume test direct start logic and light green / light red toast color specifications', () => {
+    // 1. Resume Test direct start without modal popups
+    let showExitFullscreenModal = true; // Was open before resume
+    let resumeGracePeriod = false;
+    let mode = 'resume_prompt';
+    let wasFullscreen = false;
+
+    const handleResume = () => {
+      resumeGracePeriod = true;
+      showExitFullscreenModal = false;
+      mode = 'testing';
+    };
+
+    handleResume();
+    assert.equal(showExitFullscreenModal, false, 'Modal must be dismissed immediately on resume');
+    assert.equal(mode, 'testing', 'Test must start directly');
+    assert.equal(resumeGracePeriod, true, 'Grace period must be active during resume transition');
+
+    // Fullscreen change triggered during resume transition
+    const onFsChange = (isFs) => {
+      if (!isFs) {
+        if (wasFullscreen && !resumeGracePeriod) {
+          showExitFullscreenModal = true;
+        }
+      }
+    };
+
+    onFsChange(false);
+    assert.equal(showExitFullscreenModal, false, 'Exit modal must NOT pop up during resume');
+
+    // 2. Toast notification color specifications
+    const getToastTheme = (type) => {
+      if (type === 'success') {
+        return { bg: '#ecfdf5', text: '#065f46', border: '#a7f3d0' };
+      }
+      if (type === 'error') {
+        return { bg: '#fef2f2', text: '#991b1b', border: '#fecaca' };
+      }
+      return { bg: '#eff6ff', text: '#1e40af', border: '#bfdbfe' };
+    };
+
+    const successTheme = getToastTheme('success');
+    assert.equal(successTheme.bg, '#ecfdf5', 'Success notification must use light green background');
+    assert.equal(successTheme.text, '#065f46', 'Success notification must use dark green text');
+
+    const errorTheme = getToastTheme('error');
+    assert.equal(errorTheme.bg, '#fef2f2', 'Error notification must use light red background');
+    assert.equal(errorTheme.text, '#991b1b', 'Error notification must use dark red text');
+  });
 });

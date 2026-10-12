@@ -8,7 +8,8 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "node --test test/*.unit.test.js",
-    "test:integration": "node test-suite.js"
+    "test:integration": "node test-suite.js",
+    "test:api-audit": "node test/check-all-apis.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

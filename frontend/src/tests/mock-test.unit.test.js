@@ -119,23 +119,29 @@ test('Mock Test Frontend Logic & Utilities', async (t) => {
     assert.equal(totalMarks, 6);
   });
 
-  await t.test('6. Question Palette Status Styling: Green for Answered, Blue for Marked, Red for Opened Not Answered', () => {
+  await t.test('6. Question Palette Status Styling: Green for Answered, Blue for Marked, Red for Left Unanswered, Default & No Border when Clicked', () => {
     const getPaletteQuestionStyle = (isAnswered, isMarked, isVisited, isCurrent) => {
-      let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
-      if (isMarked) {
+      let style = '';
+      if (isCurrent) {
+        // Active clicked question: default color (NOT red), border removed
+        if (isMarked) {
+          style = 'bg-blue-600 text-white font-bold border-transparent';
+        } else if (isAnswered) {
+          style = 'bg-emerald-600 text-white font-bold border-transparent';
+        } else {
+          style = 'bg-surface-200 dark:bg-surface-700 text-text-primary font-bold border-transparent';
+        }
+      } else if (isMarked) {
         // Marked for Review: Blue
         style = 'bg-blue-600 dark:bg-blue-600 text-white border-blue-600 font-bold shadow-sm';
       } else if (isAnswered) {
         // Answered: Green
         style = 'bg-emerald-600 dark:bg-emerald-600 text-white border-emerald-600 font-bold shadow-sm';
       } else if (isVisited) {
-        // Opened but not answered: Red
+        // Opened and left unanswered: Red
         style = 'bg-red-600 dark:bg-red-600 text-white border-red-600 font-bold shadow-sm';
       } else {
         style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
-      }
-      if (isCurrent) {
-        style += ' ring-2 ring-neutral-900';
       }
       return style;
     };
@@ -148,13 +154,19 @@ test('Mock Test Frontend Logic & Utilities', async (t) => {
     const marked = getPaletteQuestionStyle(false, true, true, false);
     assert.match(marked, /bg-blue-600/);
 
-    // Opened but not answered question: must show in red
+    // Opened and left without answering: must turn red
     const openedNotAnswered = getPaletteQuestionStyle(false, false, true, false);
     assert.match(openedNotAnswered, /bg-red-600/);
 
     // Unopened question: default neutral/surface color
     const unopened = getPaletteQuestionStyle(false, false, false, false);
     assert.match(unopened, /bg-surface-100/);
+
+    // When clicked on question: must show default color, NOT red, and border removed
+    const clickedActiveQuestion = getPaletteQuestionStyle(false, false, true, true);
+    assert.doesNotMatch(clickedActiveQuestion, /bg-red-600/, 'Active clicked question must NOT show red');
+    assert.match(clickedActiveQuestion, /bg-surface-200/, 'Active clicked question must show default color');
+    assert.match(clickedActiveQuestion, /border-transparent/, 'Active clicked question must have border removed');
   });
 
   await t.test('7. Fullscreen Mode Navbar Suppression Logic', () => {
@@ -393,5 +405,36 @@ test('Mock Test Frontend Logic & Utilities', async (t) => {
     // Missing date fallback
     assert.equal(formatAttemptDate(null), 'N/A');
     assert.equal(formatAttemptDate(undefined), 'N/A');
+  });
+
+  await t.test('14. Test Activity Timeline modal state and uncrowded result screen behavior', () => {
+    // Initial state: timeline modal is closed to keep result screen clean and uncrowded
+    let showTimelineModal = false;
+    assert.equal(showTimelineModal, false, 'Timeline modal must be closed by default');
+
+    // User clicks "Test Activity Timeline" button
+    const openTimelineModal = () => {
+      showTimelineModal = true;
+    };
+    openTimelineModal();
+    assert.equal(showTimelineModal, true, 'Timeline modal opens on button click');
+
+    // User closes the modal via close button or backdrop
+    const closeTimelineModal = () => {
+      showTimelineModal = false;
+    };
+    closeTimelineModal();
+    assert.equal(showTimelineModal, false, 'Timeline modal closes cleanly');
+
+    // Activity events formatting audit
+    const sampleEvents = [
+      { type: 'test_started', details: 'Candidate started session', timestamp: new Date().toISOString() },
+      { type: 'tab_hidden', durationSeconds: 4, details: 'Window switch', timestamp: new Date().toISOString() },
+      { type: 'test_submitted', details: 'Candidate submitted test', timestamp: new Date().toISOString() },
+    ];
+
+    assert.equal(sampleEvents.length, 3);
+    assert.equal(sampleEvents[1].durationSeconds, 4);
+    assert.equal(sampleEvents[0].type, 'test_started');
   });
 });

@@ -61,6 +61,7 @@ export const MockTestAttempt = () => {
   const [reviewFilter, setReviewFilter] = useState('all');
   const [showSolutions, setShowSolutions] = useState(false);
   const [result, setResult] = useState(null);
+  const [showTimelineModal, setShowTimelineModal] = useState(false);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
@@ -572,8 +573,8 @@ export const MockTestAttempt = () => {
   const totalQuestions = test?.questions?.length || 0;
   const unattemptedCount = Math.max(0, totalQuestions - attemptedCount);
   const markedCount = markedForReview.size;
-  const notAnsweredCount = (test?.questions || []).filter((_, idx) => visitedQuestions.has(idx) && selectedAnswers[idx] === undefined && !markedForReview.has(idx)).length;
-  const notVisitedCount = Math.max(0, totalQuestions - attemptedCount - notAnsweredCount - markedCount);
+  const notAnsweredCount = (test?.questions || []).filter((_, idx) => visitedQuestions.has(idx) && idx !== currentIndex && selectedAnswers[idx] === undefined && !markedForReview.has(idx)).length;
+  const notVisitedCount = Math.max(0, totalQuestions - attemptedCount - notAnsweredCount - markedCount - (selectedAnswers[currentIndex] === undefined && !markedForReview.has(currentIndex) && visitedQuestions.has(currentIndex) ? 1 : 0));
 
   const submitTestInternal = async () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -1095,6 +1096,15 @@ export const MockTestAttempt = () => {
               {showSolutions ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
             <button
+              type="button"
+              id="test-activity-timeline-btn"
+              onClick={() => setShowTimelineModal(true)}
+              className="btn btn-secondary btn-sm flex items-center gap-1.5 touch-manipulation font-semibold"
+            >
+              <Activity size={14} />
+              <span>Test Activity Timeline</span>
+            </button>
+            <button
               onClick={handleRetake}
               className="btn btn-secondary btn-sm flex items-center gap-1.5 touch-manipulation"
             >
@@ -1110,68 +1120,33 @@ export const MockTestAttempt = () => {
           </div>
         </div>
 
-        {/* Dedicated Activity Timeline */}
-        <div className="card p-5 sm:p-7 space-y-4">
-          <div className="flex items-center justify-between border-b border-border-color pb-3">
+        {/* Compact Activity Timeline Access Card */}
+        <div className="card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-50 dark:bg-surface-800/40 border-border-color">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-surface-100 dark:bg-surface-700 flex items-center justify-center text-text-primary border border-border-color shrink-0">
+              <Activity size={18} />
+            </div>
             <div>
-              <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
-                <Activity size={17} />
+              <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
                 Test Activity Timeline
-              </h2>
+                <span className="text-xs font-mono text-text-secondary font-normal">
+                  ({(result.activityEvents || []).length} Recorded Events)
+                </span>
+              </h3>
               <p className="text-xs text-text-secondary mt-0.5">
-                Objective chronological audit log of session start, resumes, focus changes, and submission.
+                Objective chronological audit log of session start, resumes, tab switches, and test submission.
               </p>
             </div>
-            <span className="text-xs font-mono text-text-secondary">
-              {(result.activityEvents || []).length} Recorded Events
-            </span>
           </div>
-
-          {(result.activityEvents || []).length === 0 ? (
-            <p className="text-xs text-text-secondary py-3">No activity events recorded for this session.</p>
-          ) : (
-            <div className="space-y-3 pt-2 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-border-color">
-              {result.activityEvents.map((evt, idx) => {
-                let icon = <Activity size={13} />;
-
-                if (evt.type === 'test_started') {
-                  icon = <Clock size={13} />;
-                } else if (evt.type === 'tab_hidden' || evt.type === 'tab_visible') {
-                  icon = <EyeOff size={13} />;
-                } else if (evt.type === 'fullscreen_exit') {
-                  icon = <Minimize2 size={13} />;
-                } else if (evt.type === 'test_resumed') {
-                  icon = <RotateCcw size={13} />;
-                } else if (evt.type === 'test_submitted') {
-                  icon = <CheckCircle2 size={13} />;
-                }
-
-                return (
-                  <div key={idx} className="relative flex items-start gap-3.5 pl-1.5">
-                    <div className="w-5 h-5 rounded-full border border-border-color bg-surface-50 dark:bg-surface-900 flex items-center justify-center shrink-0 z-10 text-text-primary">
-                      {icon}
-                    </div>
-
-                    <div className="flex-1 p-3 rounded-lg border border-border-color bg-surface-50 dark:bg-surface-800/40 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                      <div>
-                        <span className="font-semibold text-text-primary">
-                          {evt.details || evt.type.replace(/_/g, ' ')}
-                        </span>
-                        {evt.durationSeconds > 0 && (
-                          <span className="ml-2 font-mono text-[11px] px-1.5 py-0.5 rounded bg-surface-200 dark:bg-surface-700 text-text-secondary">
-                            Duration: {evt.durationSeconds}s
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-mono text-[11px] text-text-secondary shrink-0">
-                        {formatDateTime(evt.timestamp)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <button
+            type="button"
+            id="view-activity-timeline-card-btn"
+            onClick={() => setShowTimelineModal(true)}
+            className="btn btn-secondary btn-sm flex items-center gap-1.5 touch-manipulation font-semibold shrink-0 self-start sm:self-auto"
+          >
+            <Activity size={14} />
+            <span>Test Activity Timeline</span>
+          </button>
         </div>
 
         {/* Question Review Section */}
@@ -1343,6 +1318,114 @@ export const MockTestAttempt = () => {
             </div>
           )}
         </div>
+
+        {/* Test Activity Timeline Modal Dialog */}
+        {showTimelineModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowTimelineModal(false);
+            }}
+          >
+            <div className="card max-w-2xl w-full max-h-[85vh] flex flex-col p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-150 shadow-2xl overflow-hidden border border-border-color bg-surface-50 dark:bg-surface-900">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-border-color pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-surface-100 dark:bg-surface-800 flex items-center justify-center text-text-primary border border-border-color shrink-0">
+                    <Activity size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-bold text-text-primary flex items-center gap-2">
+                      Test Activity Timeline
+                      <span className="text-xs font-mono font-normal px-2 py-0.5 rounded bg-surface-200 dark:bg-surface-800 text-text-secondary">
+                        {(result.activityEvents || []).length} Events
+                      </span>
+                    </h2>
+                    <p className="text-xs text-text-secondary mt-0.5">
+                      Chronological audit log of session start, focus changes, fullscreen transitions, and submission.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  id="close-timeline-modal-btn"
+                  onClick={() => setShowTimelineModal(false)}
+                  className="p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 text-text-secondary hover:text-text-primary transition"
+                  aria-label="Close timeline modal"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Modal Body: Scrollable Timeline */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-3 max-h-[55vh]">
+                {(result.activityEvents || []).length === 0 ? (
+                  <div className="text-center py-8 space-y-2">
+                    <History size={28} className="mx-auto text-text-secondary opacity-60" />
+                    <p className="text-xs text-text-secondary">No activity events recorded for this session.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 pt-2 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-border-color">
+                    {result.activityEvents.map((evt, idx) => {
+                      let icon = <Activity size={13} />;
+
+                      if (evt.type === 'test_started') {
+                        icon = <Clock size={13} />;
+                      } else if (evt.type === 'tab_hidden' || evt.type === 'tab_visible') {
+                        icon = <EyeOff size={13} />;
+                      } else if (evt.type === 'fullscreen_exit') {
+                        icon = <Minimize2 size={13} />;
+                      } else if (evt.type === 'test_resumed') {
+                        icon = <RotateCcw size={13} />;
+                      } else if (evt.type === 'test_submitted') {
+                        icon = <CheckCircle2 size={13} />;
+                      }
+
+                      return (
+                        <div key={idx} className="relative flex items-start gap-3.5 pl-1.5">
+                          <div className="w-5 h-5 rounded-full border border-border-color bg-surface-50 dark:bg-surface-900 flex items-center justify-center shrink-0 z-10 text-text-primary">
+                            {icon}
+                          </div>
+
+                          <div className="flex-1 p-3 rounded-lg border border-border-color bg-surface-100/70 dark:bg-surface-800/50 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                            <div>
+                              <span className="font-semibold text-text-primary">
+                                {evt.details || evt.type.replace(/_/g, ' ')}
+                              </span>
+                              {evt.durationSeconds > 0 && (
+                                <span className="ml-2 font-mono text-[11px] px-1.5 py-0.5 rounded bg-surface-200 dark:bg-surface-700 text-text-secondary">
+                                  Duration: {evt.durationSeconds}s
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-mono text-[11px] text-text-secondary shrink-0">
+                              {formatDateTime(evt.timestamp)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-3 border-t border-border-color flex items-center justify-between">
+                <span className="text-xs text-text-secondary font-mono">
+                  Assessment Integrity Audit
+                </span>
+                <button
+                  type="button"
+                  id="close-timeline-modal-footer-btn"
+                  onClick={() => setShowTimelineModal(false)}
+                  className="btn btn-secondary btn-sm min-h-[36px] px-4 touch-manipulation"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1369,16 +1452,16 @@ export const MockTestAttempt = () => {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 w-full space-y-4 sm:space-y-5 pb-24 lg:pb-6">
       {showAwayBanner && (
-        <div className="p-3.5 rounded-xl border border-red-500/40 bg-red-50/90 dark:bg-red-950/40 text-xs text-red-900 dark:text-red-200 flex items-center justify-between gap-3 animate-in fade-in duration-200 shadow-sm ring-1 ring-red-500/20">
+        <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-50/95 dark:bg-amber-950/40 text-xs text-amber-950 dark:text-amber-200 flex items-center justify-between gap-3 animate-in fade-in duration-200 shadow-sm ring-1 ring-amber-500/20">
           <div className="flex items-center gap-2">
-            <EyeOff size={16} className="text-red-600 dark:text-red-400 shrink-0" />
+            <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
             <span>
-              <strong className="text-red-700 dark:text-red-300">Tab Switch Warning:</strong> You left the test page for <strong className="text-red-600 dark:text-red-400">{lastAwayDuration} seconds</strong>. This activity has been recorded in your session integrity timeline.
+              <strong className="text-amber-800 dark:text-amber-300 font-bold">Tab Switch Warning:</strong> You left the test page for <strong className="text-amber-800 dark:text-amber-300 font-bold">{lastAwayDuration} seconds</strong>. This activity has been recorded in your session integrity timeline.
             </span>
           </div>
           <button
             onClick={() => setShowAwayBanner(false)}
-            className="p-1 rounded text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/50 transition"
+            className="p-1 rounded text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition"
             aria-label="Dismiss banner"
           >
             <X size={14} />
@@ -1723,8 +1806,17 @@ export const MockTestAttempt = () => {
                 const isVisited = visitedQuestions.has(qIdx);
                 const isCurrent = currentIndex === qIdx;
 
-                let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
-                if (isMarked) {
+                let style = '';
+                if (isCurrent) {
+                  // Active clicked question: default color (NOT red), border removed
+                  if (isMarked) {
+                    style = 'bg-blue-600 text-white font-bold border-transparent';
+                  } else if (isAnswered) {
+                    style = 'bg-emerald-600 text-white font-bold border-transparent';
+                  } else {
+                    style = 'bg-surface-200 dark:bg-surface-700 text-text-primary font-bold border-transparent';
+                  }
+                } else if (isMarked) {
                   style = 'bg-blue-600 dark:bg-blue-600 text-white border-blue-600 font-bold shadow-sm hover:bg-blue-700';
                 } else if (isAnswered) {
                   style = 'bg-emerald-600 dark:bg-emerald-600 text-white border-emerald-600 font-bold shadow-sm hover:bg-emerald-700';
@@ -1733,16 +1825,15 @@ export const MockTestAttempt = () => {
                 } else {
                   style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color hover:border-neutral-400';
                 }
-                if (isCurrent) {
-                  style += ' ring-2 ring-neutral-900 dark:ring-neutral-100 ring-offset-1 dark:ring-offset-neutral-900 font-extrabold scale-[1.03]';
-                }
 
                 return (
                   <button
                     key={qIdx}
                     type="button"
                     onClick={() => setCurrentIndex(qIdx)}
-                    className={`h-9 rounded-lg border font-mono text-xs transition flex items-center justify-center relative touch-manipulation active:scale-95 ${style}`}
+                    className={`h-9 rounded-lg font-mono text-xs transition flex items-center justify-center relative touch-manipulation active:scale-95 ${
+                      isCurrent ? 'border-0' : 'border'
+                    } ${style}`}
                   >
                     <span>{qIdx + 1}</span>
                     {isMarked && (
@@ -1870,8 +1961,16 @@ export const MockTestAttempt = () => {
                   const isVisited = visitedQuestions.has(qIdx);
                   const isCurrent = currentIndex === qIdx;
 
-                  let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
-                  if (isMarked) {
+                  let style = '';
+                  if (isCurrent) {
+                    if (isMarked) {
+                      style = 'bg-blue-600 text-white font-bold border-transparent';
+                    } else if (isAnswered) {
+                      style = 'bg-emerald-600 text-white font-bold border-transparent';
+                    } else {
+                      style = 'bg-surface-200 dark:bg-surface-700 text-text-primary font-bold border-transparent';
+                    }
+                  } else if (isMarked) {
                     style = 'bg-blue-600 dark:bg-blue-600 text-white border-blue-600 font-bold shadow-sm';
                   } else if (isAnswered) {
                     style = 'bg-emerald-600 dark:bg-emerald-600 text-white border-emerald-600 font-bold shadow-sm';
@@ -1879,9 +1978,6 @@ export const MockTestAttempt = () => {
                     style = 'bg-red-600 dark:bg-red-600 text-white border-red-600 font-bold shadow-sm';
                   } else {
                     style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
-                  }
-                  if (isCurrent) {
-                    style += ' ring-2 ring-neutral-900 dark:ring-neutral-100 ring-offset-1 dark:ring-offset-neutral-900 font-extrabold';
                   }
 
                   return (
@@ -1892,7 +1988,9 @@ export const MockTestAttempt = () => {
                         setCurrentIndex(qIdx);
                         setShowMobilePalette(false);
                       }}
-                      className={`h-11 rounded-lg border font-mono text-xs font-semibold transition flex items-center justify-center relative touch-manipulation active:scale-95 ${style}`}
+                      className={`h-11 rounded-lg font-mono text-xs font-semibold transition flex items-center justify-center relative touch-manipulation active:scale-95 ${
+                        isCurrent ? 'border-0' : 'border'
+                      } ${style}`}
                     >
                       <span>{qIdx + 1}</span>
                       {isMarked && (
@@ -2078,44 +2176,44 @@ export const MockTestAttempt = () => {
       {/* Window Switch Anti-Cheating Warning Modal */}
       {showWindowSwitchModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="card max-w-md w-full p-6 space-y-4 border-red-500/50 shadow-2xl bg-surface-0 dark:bg-surface-900 animate-in zoom-in-95 duration-150 ring-1 ring-red-500/30">
+          <div className="card max-w-md w-full p-6 space-y-4 border-amber-500/40 dark:border-amber-500/30 shadow-2xl bg-surface-0 dark:bg-surface-900 animate-in zoom-in-95 duration-150 ring-1 ring-amber-500/20">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-red-100 dark:bg-red-950/70 border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 shrink-0">
-                <ShieldAlert size={26} />
+              <div className="p-3 rounded-xl bg-amber-100 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 shrink-0">
+                <AlertTriangle size={24} />
               </div>
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
-                  Anti-Cheating Security Alert
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  Assessment Warning
                 </span>
-                <h3 className="text-base font-bold text-red-600 dark:text-red-400 mt-1">
-                  Tab / Window Switch Warning
+                <h3 className="text-base font-bold text-text-primary mt-1">
+                  Tab / Window Switch Detected
                 </h3>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-lg bg-red-50/70 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 text-xs space-y-2">
+            <div className="p-3.5 rounded-lg bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-red-700 dark:text-red-300 font-medium">Switch Event:</span>
-                <span className="font-mono font-bold text-red-600 dark:text-red-400">
+                <span className="text-text-secondary font-medium">Switch Event:</span>
+                <span className="font-mono font-bold text-amber-700 dark:text-amber-300">
                   Incident #{windowSwitchIncident || sessionMeta.tabSwitchCount || 1}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-red-700 dark:text-red-300 font-medium">Time Spent Away:</span>
-                <span className="font-mono font-bold text-red-600 dark:text-red-400">
+                <span className="text-text-secondary font-medium">Time Spent Away:</span>
+                <span className="font-mono font-bold text-amber-700 dark:text-amber-300">
                   {lastAwayDuration} second{lastAwayDuration === 1 ? '' : 's'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-red-700 dark:text-red-300 font-medium">Total Suspicious Away Time:</span>
-                <span className="font-mono font-bold text-red-600 dark:text-red-400">
+                <span className="text-text-secondary font-medium">Total Away Time:</span>
+                <span className="font-mono font-bold text-amber-700 dark:text-amber-300">
                   {sessionMeta.totalTimeAwaySeconds}s
                 </span>
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-red-50/50 dark:bg-red-950/20 border-l-2 border-red-500 text-xs text-red-700 dark:text-red-300 leading-relaxed font-medium">
-              Switching windows, opening other applications, or changing browser tabs is strictly monitored to prevent unauthorized aids. This incident has been logged in your assessment integrity audit.
+            <div className="p-3 rounded-lg bg-surface-100 dark:bg-surface-800/80 border-l-4 border-amber-500 text-xs text-text-secondary leading-relaxed">
+              Switching windows, opening other applications, or changing browser tabs is strictly monitored to maintain assessment integrity. This incident has been logged in your session activity audit.
             </div>
 
             <div className="pt-2 border-t border-border-color flex justify-end">
@@ -2128,7 +2226,7 @@ export const MockTestAttempt = () => {
                     await requestFullscreen().catch(() => {});
                   }
                 }}
-                className="btn bg-red-600 hover:bg-red-700 active:bg-red-800 text-white btn-sm flex items-center gap-1.5 text-xs font-semibold px-4 min-h-[38px] touch-manipulation shadow-sm shadow-red-600/30"
+                className="btn btn-primary btn-sm flex items-center gap-1.5 text-xs font-semibold px-4 min-h-[38px] touch-manipulation shadow-sm"
               >
                 <CheckCircle2 size={14} />
                 <span>I Understand & Return to Test</span>

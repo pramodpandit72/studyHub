@@ -281,6 +281,71 @@ export const getSessionStatus = async (req, res) => {
     }
 
     const now = Date.now();
+
+    // 7-DAY PAUSE POLICY: If test was paused, user can attempt/resume within 7 days.
+    // After 7 days from when test was paused, it is automatically submitted.
+    if (session.isPaused || session.status === 'interrupted') {
+      const pauseExpiresTime = session.pauseExpiresAt ? new Date(session.pauseExpiresAt).getTime() : null;
+      if (pauseExpiresTime && now > pauseExpiresTime) {
+        // Auto-finalize and submit after 7 days
+        const evaluation = evaluateTestAnswers(test, session.savedAnswers || {});
+        session.status = 'submitted';
+        session.isPaused = false;
+        session.submittedAt = new Date(pauseExpiresTime);
+        session.score = evaluation.score;
+        session.totalMarks = evaluation.totalMarks;
+        session.percentage = evaluation.percentage;
+        session.isPassed = evaluation.isPassed;
+        session.correctCount = evaluation.correctCount;
+        session.incorrectCount = evaluation.incorrectCount;
+        session.unattemptedCount = evaluation.unattemptedCount;
+        session.timeSpentSeconds = (session.durationMinutes || 15) * 60;
+        session.answers = evaluation.evaluatedAnswers;
+        session.activityEvents.push({
+          type: 'test_expired',
+          timestamp: new Date(pauseExpiresTime),
+          details: '7-day pause window expired - test automatically finalized and submitted',
+        });
+        await session.save();
+
+        return sendSuccess(res, 200, 'Session paused for more than 7 days and was automatically submitted.', {
+          hasActiveSession: false,
+          isExpired: true,
+          autoSubmitted: true,
+          attemptId: session._id,
+        });
+      }
+
+      // Within 7 days: user can resume with preserved remaining seconds
+      const preservedSeconds = session.remainingSecondsAtPause !== undefined && session.remainingSecondsAtPause !== null
+        ? session.remainingSecondsAtPause
+        : (session.deadline ? Math.max(1, Math.round((new Date(session.deadline).getTime() - (session.pausedAt ? new Date(session.pausedAt).getTime() : now)) / 1000)) : (session.durationMinutes || 15) * 60);
+
+      return sendSuccess(res, 200, 'Active paused test session found.', {
+        hasActiveSession: true,
+        session: {
+          _id: session._id,
+          status: session.status,
+          isPaused: true,
+          pausedAt: session.pausedAt,
+          pauseExpiresAt: session.pauseExpiresAt,
+          startedAt: session.startedAt,
+          deadline: session.deadline,
+          remainingSeconds: preservedSeconds,
+          durationMinutes: session.durationMinutes,
+          resumeCount: session.resumeCount || 0,
+          maxResumesAllowed: session.maxResumesAllowed || 4,
+          resumesRemaining: Math.max(0, (session.maxResumesAllowed || 4) - (session.resumeCount || 0)),
+          savedAnswers: session.savedAnswers || {},
+          currentQuestionIndex: session.currentQuestionIndex || 0,
+          tabSwitchCount: session.tabSwitchCount || 0,
+          totalTimeAwaySeconds: session.totalTimeAwaySeconds || 0,
+          fullscreenExitCount: session.fullscreenExitCount || 0,
+          activityEvents: session.activityEvents || [],
+        },
+      });
+    }
+
     const deadlineTime = session.deadline ? new Date(session.deadline).getTime() : (new Date(session.startedAt).getTime() + (session.durationMinutes || 15) * 60 * 1000);
     const remainingSeconds = Math.max(0, Math.round((deadlineTime - now) / 1000));
 
@@ -354,10 +419,24 @@ export const startTestSession = async (req, res) => {
     }).sort({ createdAt: -1 });
 
     if (existingSession) {
-      const deadlineTime = existingSession.deadline
-        ? new Date(existingSession.deadline).getTime()
-        : (new Date(existingSession.startedAt).getTime() + (existingSession.durationMinutes || 15) * 60 * 1000);
-      const remainingSeconds = Math.max(0, Math.round((deadlineTime - now) / 1000));
+      const isPaused = existingSession.isPaused || existingSession.status === 'interrupted';
+      const pauseExpiresTime = existingSession.pauseExpiresAt ? new Date(existingSession.pauseExpiresAt).getTime() : null;
+
+      let remainingSeconds = 0;
+      if (isPaused) {
+        if (pauseExpiresTime && now > pauseExpiresTime) {
+          remainingSeconds = 0;
+        } else {
+          remainingSeconds = existingSession.remainingSecondsAtPause !== undefined && existingSession.remainingSecondsAtPause !== null
+            ? existingSession.remainingSecondsAtPause
+            : (existingSession.durationMinutes || 15) * 60;
+        }
+      } else {
+        const deadlineTime = existingSession.deadline
+          ? new Date(existingSession.deadline).getTime()
+          : (new Date(existingSession.startedAt).getTime() + (existingSession.durationMinutes || 15) * 60 * 1000);
+        remainingSeconds = Math.max(0, Math.round((deadlineTime - now) / 1000));
+      }
 
       if (remainingSeconds > 0) {
         return sendSuccess(res, 200, 'Active session already exists.', {
@@ -538,6 +617,18 @@ export const recordSessionActivity = async (req, res) => {
       session.fullscreenExitCount = (session.fullscreenExitCount || 0) + 1;
     } else if (type === 'session_interrupted') {
       session.status = 'interrupted';
+      session.isPaused = true;
+      const pauseDate = new Date();
+      session.pausedAt = pauseDate;
+      // Exactly 7 days resume window
+      session.pauseExpiresAt = new Date(pauseDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+      if (req.body.remainingSeconds !== undefined && req.body.remainingSeconds !== null) {
+        session.remainingSecondsAtPause = Math.max(1, Math.round(Number(req.body.remainingSeconds)));
+      } else if (session.deadline) {
+        const diff = Math.max(1, Math.round((new Date(session.deadline).getTime() - Date.now()) / 1000));
+        session.remainingSecondsAtPause = diff;
+      }
     }
 
     await session.save();
@@ -567,14 +658,50 @@ export const resumeTestSession = async (req, res) => {
     if (!session) return sendError(res, 404, 'No active test session available to resume.');
 
     const now = Date.now();
-    const deadlineTime = session.deadline
-      ? new Date(session.deadline).getTime()
-      : (new Date(session.startedAt).getTime() + (session.durationMinutes || 15) * 60 * 1000);
-    const remainingSeconds = Math.max(0, Math.round((deadlineTime - now) / 1000));
+
+    // Check if 7-day pause window has expired
+    if ((session.isPaused || session.status === 'interrupted') && session.pauseExpiresAt) {
+      if (now > new Date(session.pauseExpiresAt).getTime()) {
+        const test = await MockTest.findById(testId);
+        const evalExpired = evaluateTestAnswers(test, session.savedAnswers || {});
+        session.status = 'submitted';
+        session.isPaused = false;
+        session.submittedAt = new Date(session.pauseExpiresAt);
+        session.score = evalExpired.score;
+        session.totalMarks = evalExpired.totalMarks;
+        session.percentage = evalExpired.percentage;
+        session.isPassed = evalExpired.isPassed;
+        session.correctCount = evalExpired.correctCount;
+        session.incorrectCount = evalExpired.incorrectCount;
+        session.unattemptedCount = evalExpired.unattemptedCount;
+        session.timeSpentSeconds = (session.durationMinutes || 15) * 60;
+        session.answers = evalExpired.evaluatedAnswers;
+        session.activityEvents.push({
+          type: 'test_expired',
+          timestamp: new Date(session.pauseExpiresAt),
+          details: '7-day pause window expired - test automatically finalized and submitted',
+        });
+        await session.save();
+        return sendError(res, 400, 'Test was paused for more than 7 days and has been automatically submitted.');
+      }
+    }
+
+    // STRICT RESUME POLICY: Maximum 4 resume attempts per session
+    const currentResumes = session.resumeCount || 0;
+    const maxAllowed = session.maxResumesAllowed || 4;
+
+    if (currentResumes >= maxAllowed) {
+      return sendError(res, 400, `Maximum resume limit of ${maxAllowed} attempts has been reached for this test session.`);
+    }
+
+    // Determine remaining seconds to restore
+    let remainingSeconds = session.remainingSecondsAtPause !== undefined && session.remainingSecondsAtPause !== null
+      ? session.remainingSecondsAtPause
+      : (session.deadline ? Math.max(0, Math.round((new Date(session.deadline).getTime() - now) / 1000)) : (session.durationMinutes || 15) * 60);
 
     if (remainingSeconds <= 0) {
       session.status = 'expired';
-      session.submittedAt = new Date(deadlineTime);
+      session.submittedAt = new Date(now);
       const test = await MockTest.findById(testId);
       const evalExpired = evaluateTestAnswers(test, session.savedAnswers || {});
       session.score = evalExpired.score;
@@ -590,16 +717,11 @@ export const resumeTestSession = async (req, res) => {
       return sendError(res, 400, 'Test duration has expired. This session can no longer be resumed.');
     }
 
-    // STRICT RESUME POLICY: Maximum 4 resume attempts per session
-    const currentResumes = session.resumeCount || 0;
-    const maxAllowed = session.maxResumesAllowed || 4;
-
-    if (currentResumes >= maxAllowed) {
-      return sendError(res, 400, `Maximum resume limit of ${maxAllowed} attempts has been reached for this test session.`);
-    }
-
     session.resumeCount = currentResumes + 1;
     session.status = 'in_progress';
+    session.isPaused = false;
+    session.deadline = new Date(now + remainingSeconds * 1000);
+    session.remainingSecondsAtPause = undefined;
 
     session.resumes.push({
       resumedAt: new Date(now),

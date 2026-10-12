@@ -80,6 +80,19 @@ const mockTestAttemptSchema = new mongoose.Schema({
   submittedAt: {
     type: Date,
   },
+  isPaused: {
+    type: Boolean,
+    default: false,
+  },
+  pausedAt: {
+    type: Date,
+  },
+  pauseExpiresAt: {
+    type: Date,
+  },
+  remainingSecondsAtPause: {
+    type: Number,
+  },
   durationMinutes: {
     type: Number,
     default: 15,

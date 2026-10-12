@@ -119,37 +119,42 @@ test('Mock Test Frontend Logic & Utilities', async (t) => {
     assert.equal(totalMarks, 6);
   });
 
-  await t.test('6. Marked for Review Question Number styling evaluates to Grey color', () => {
-    const getPaletteQuestionStyle = (isAnswered, isMarked, isCurrent) => {
+  await t.test('6. Question Palette Status Styling: Green for Answered, Blue for Marked, Red for Opened Not Answered', () => {
+    const getPaletteQuestionStyle = (isAnswered, isMarked, isVisited, isCurrent) => {
       let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
       if (isMarked) {
-        // Marked for review questions MUST show in grey color
-        style = 'bg-neutral-300 dark:bg-neutral-600 text-neutral-900 dark:text-neutral-100 border-neutral-500 font-bold shadow-sm';
+        // Marked for Review: Blue
+        style = 'bg-blue-600 dark:bg-blue-600 text-white border-blue-600 font-bold shadow-sm';
       } else if (isAnswered) {
-        style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
+        // Answered: Green
+        style = 'bg-emerald-600 dark:bg-emerald-600 text-white border-emerald-600 font-bold shadow-sm';
+      } else if (isVisited) {
+        // Opened but not answered: Red
+        style = 'bg-red-600 dark:bg-red-600 text-white border-red-600 font-bold shadow-sm';
+      } else {
+        style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
       }
       if (isCurrent) {
-        style += ' ring-2 ring-neutral-400 dark:ring-neutral-200';
+        style += ' ring-2 ring-neutral-900';
       }
       return style;
     };
 
-    // Unanswered but Marked: must have grey background
-    const markedUnanswered = getPaletteQuestionStyle(false, true, false);
-    assert.match(markedUnanswered, /bg-neutral-300/);
-    assert.match(markedUnanswered, /border-neutral-500/);
+    // Answered question: must show in green
+    const answered = getPaletteQuestionStyle(true, false, true, false);
+    assert.match(answered, /bg-emerald-600/);
 
-    // Answered AND Marked: must show in grey color
-    const markedAnswered = getPaletteQuestionStyle(true, true, false);
-    assert.match(markedAnswered, /bg-neutral-300/);
+    // Marked for review question: must show in blue
+    const marked = getPaletteQuestionStyle(false, true, true, false);
+    assert.match(marked, /bg-blue-600/);
 
-    // Answered only (not marked): shows in black/primary
-    const answeredOnly = getPaletteQuestionStyle(true, false, false);
-    assert.match(answeredOnly, /bg-text-primary/);
+    // Opened but not answered question: must show in red
+    const openedNotAnswered = getPaletteQuestionStyle(false, false, true, false);
+    assert.match(openedNotAnswered, /bg-red-600/);
 
-    // Unanswered only: standard neutral
-    const standard = getPaletteQuestionStyle(false, false, false);
-    assert.match(standard, /bg-surface-100/);
+    // Unopened question: default neutral/surface color
+    const unopened = getPaletteQuestionStyle(false, false, false, false);
+    assert.match(unopened, /bg-surface-100/);
   });
 
   await t.test('7. Fullscreen Mode Navbar Suppression Logic', () => {

@@ -48,6 +48,7 @@ export const MockTestAttempt = () => {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [markedForReview, setMarkedForReview] = useState(new Set());
+  const [visitedQuestions, setVisitedQuestions] = useState(new Set([0]));
   const [paletteFilter, setPaletteFilter] = useState('all');
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(0);
@@ -115,6 +116,17 @@ export const MockTestAttempt = () => {
       document.removeEventListener('MSFullscreenChange', updateFsState);
     };
   }, []);
+
+  useEffect(() => {
+    if (mode === 'testing') {
+      setVisitedQuestions((prev) => {
+        if (prev.has(currentIndex)) return prev;
+        const next = new Set(prev);
+        next.add(currentIndex);
+        return next;
+      });
+    }
+  }, [currentIndex, mode]);
 
   useEffect(() => {
     if (mode !== 'testing' || result) return;
@@ -560,6 +572,8 @@ export const MockTestAttempt = () => {
   const totalQuestions = test?.questions?.length || 0;
   const unattemptedCount = Math.max(0, totalQuestions - attemptedCount);
   const markedCount = markedForReview.size;
+  const notAnsweredCount = (test?.questions || []).filter((_, idx) => visitedQuestions.has(idx) && selectedAnswers[idx] === undefined && !markedForReview.has(idx)).length;
+  const notVisitedCount = Math.max(0, totalQuestions - attemptedCount - notAnsweredCount - markedCount);
 
   const submitTestInternal = async () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -675,7 +689,7 @@ export const MockTestAttempt = () => {
                 <strong className="text-text-primary">Fullscreen Requirement:</strong> You can enable fullscreen mode to maintain test focus. An exit warning and re-entry button appear if fullscreen is interrupted.
               </li>
               <li>
-                <strong className="text-text-primary">Activity & Tab-Switch Monitoring:</strong> Window minimization and tab switching are tracked as objective activity indicators and logged in the session audit timeline.
+                <strong className="text-red-600 dark:text-red-400 font-bold">Activity & Tab-Switch Monitoring:</strong> Window minimization and tab switching are strictly tracked as objective activity indicators and logged in the session audit timeline.
               </li>
               <li>
                 <strong className="text-text-primary">Session Resume Policy (Max 4 Attempts):</strong> In case of accidental disconnection or browser refresh, your progress is saved. You are allowed up to a maximum of <strong className="text-text-primary">4 successful resume attempts</strong>.
@@ -1355,16 +1369,16 @@ export const MockTestAttempt = () => {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 w-full space-y-4 sm:space-y-5 pb-24 lg:pb-6">
       {showAwayBanner && (
-        <div className="p-3.5 rounded-xl border border-neutral-500 bg-surface-100 dark:bg-surface-800 text-xs text-text-primary flex items-center justify-between gap-3 animate-in fade-in duration-200">
+        <div className="p-3.5 rounded-xl border border-red-500/40 bg-red-50/90 dark:bg-red-950/40 text-xs text-red-900 dark:text-red-200 flex items-center justify-between gap-3 animate-in fade-in duration-200 shadow-sm ring-1 ring-red-500/20">
           <div className="flex items-center gap-2">
-            <EyeOff size={16} className="text-text-secondary shrink-0" />
+            <EyeOff size={16} className="text-red-600 dark:text-red-400 shrink-0" />
             <span>
-              You left the test page for <strong>{lastAwayDuration} seconds</strong>. This activity has been recorded in your session audit timeline.
+              <strong className="text-red-700 dark:text-red-300">Tab Switch Warning:</strong> You left the test page for <strong className="text-red-600 dark:text-red-400">{lastAwayDuration} seconds</strong>. This activity has been recorded in your session integrity timeline.
             </span>
           </div>
           <button
             onClick={() => setShowAwayBanner(false)}
-            className="p-1 rounded text-text-secondary hover:text-text-primary transition"
+            className="p-1 rounded text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/50 transition"
             aria-label="Dismiss banner"
           >
             <X size={14} />
@@ -1639,18 +1653,22 @@ export const MockTestAttempt = () => {
 
           <div className="grid grid-cols-2 gap-2 text-[11px] text-text-secondary">
             <div className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded bg-text-primary shrink-0" />
+              <span className="w-3.5 h-3.5 rounded bg-emerald-600 text-white shrink-0 flex items-center justify-center font-bold text-[8px]">✓</span>
               <span>Answered ({attemptedCount})</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded border border-border-color bg-surface-100 dark:bg-surface-800 shrink-0" />
-              <span>Unanswered ({unattemptedCount})</span>
+              <span className="w-3.5 h-3.5 rounded bg-red-600 text-white shrink-0" />
+              <span>Not Answered ({notAnsweredCount})</span>
             </div>
-            <div className="flex items-center gap-1.5 col-span-2 pt-0.5">
-              <span className="w-3.5 h-3.5 rounded bg-neutral-300 dark:bg-neutral-600 border border-neutral-500 flex items-center justify-center shrink-0">
-                <Bookmark size={8} className="fill-current text-neutral-900 dark:text-neutral-100" />
+            <div className="flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5 rounded bg-blue-600 text-white flex items-center justify-center shrink-0">
+                <Bookmark size={8} className="fill-current text-white" />
               </span>
-              <span className="font-semibold text-text-primary">Marked for Review (Grey) ({markedCount})</span>
+              <span>Marked ({markedCount})</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5 rounded border border-border-color bg-surface-100 dark:bg-surface-800 shrink-0" />
+              <span>Not Visited ({notVisitedCount})</span>
             </div>
           </div>
 
@@ -1702,17 +1720,21 @@ export const MockTestAttempt = () => {
               {filteredPaletteQuestions.map(({ idx: qIdx }) => {
                 const isAnswered = selectedAnswers[qIdx] !== undefined;
                 const isMarked = markedForReview.has(qIdx);
+                const isVisited = visitedQuestions.has(qIdx);
                 const isCurrent = currentIndex === qIdx;
 
                 let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
                 if (isMarked) {
-                  // Marked for review questions MUST show in grey color as requested
-                  style = 'bg-neutral-300 dark:bg-neutral-600 text-neutral-900 dark:text-neutral-100 border-neutral-500 font-bold shadow-sm';
+                  style = 'bg-blue-600 dark:bg-blue-600 text-white border-blue-600 font-bold shadow-sm hover:bg-blue-700';
                 } else if (isAnswered) {
-                  style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
+                  style = 'bg-emerald-600 dark:bg-emerald-600 text-white border-emerald-600 font-bold shadow-sm hover:bg-emerald-700';
+                } else if (isVisited) {
+                  style = 'bg-red-600 dark:bg-red-600 text-white border-red-600 font-bold shadow-sm hover:bg-red-700';
+                } else {
+                  style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color hover:border-neutral-400';
                 }
                 if (isCurrent) {
-                  style += ' ring-2 ring-neutral-400 dark:ring-neutral-200';
+                  style += ' ring-2 ring-neutral-900 dark:ring-neutral-100 ring-offset-1 dark:ring-offset-neutral-900 font-extrabold scale-[1.03]';
                 }
 
                 return (
@@ -1722,9 +1744,9 @@ export const MockTestAttempt = () => {
                     onClick={() => setCurrentIndex(qIdx)}
                     className={`h-9 rounded-lg border font-mono text-xs transition flex items-center justify-center relative touch-manipulation active:scale-95 ${style}`}
                   >
-                    <span className={isMarked ? 'text-neutral-900 dark:text-neutral-100 font-extrabold' : ''}>{qIdx + 1}</span>
+                    <span>{qIdx + 1}</span>
                     {isMarked && (
-                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-neutral-100" />
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-white shadow-sm" />
                     )}
                   </button>
                 );
@@ -1819,20 +1841,24 @@ export const MockTestAttempt = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 text-xs text-text-secondary py-1">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-text-secondary py-1">
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-text-primary shrink-0" />
+                <span className="w-3.5 h-3.5 rounded bg-emerald-600 text-white shrink-0 flex items-center justify-center font-bold text-[8px]">✓</span>
                 <span>Ans ({attemptedCount})</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded border border-border-color bg-surface-100 dark:bg-surface-800 shrink-0" />
-                <span>Unans ({unattemptedCount})</span>
+                <span className="w-3.5 h-3.5 rounded bg-red-600 text-white shrink-0" />
+                <span>Not Ans ({notAnsweredCount})</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 rounded bg-neutral-300 dark:bg-neutral-600 border border-neutral-500 flex items-center justify-center shrink-0">
-                  <Bookmark size={7} className="fill-current text-neutral-900 dark:text-neutral-100" />
+                <span className="w-3.5 h-3.5 rounded bg-blue-600 text-white flex items-center justify-center shrink-0">
+                  <Bookmark size={8} className="fill-current text-white" />
                 </span>
-                <span className="font-semibold text-text-primary">Marked (Grey) ({markedCount})</span>
+                <span>Marked ({markedCount})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded border border-border-color bg-surface-100 dark:bg-surface-800 shrink-0" />
+                <span>Not Visited ({notVisitedCount})</span>
               </div>
             </div>
 
@@ -1841,16 +1867,21 @@ export const MockTestAttempt = () => {
                 {test.questions?.map((_, qIdx) => {
                   const isAnswered = selectedAnswers[qIdx] !== undefined;
                   const isMarked = markedForReview.has(qIdx);
+                  const isVisited = visitedQuestions.has(qIdx);
                   const isCurrent = currentIndex === qIdx;
 
                   let style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
                   if (isMarked) {
-                    style = 'bg-neutral-300 dark:bg-neutral-600 text-neutral-900 dark:text-neutral-100 border-neutral-500 font-bold shadow-sm';
+                    style = 'bg-blue-600 dark:bg-blue-600 text-white border-blue-600 font-bold shadow-sm';
                   } else if (isAnswered) {
-                    style = 'bg-text-primary text-surface-50 border-text-primary font-bold';
+                    style = 'bg-emerald-600 dark:bg-emerald-600 text-white border-emerald-600 font-bold shadow-sm';
+                  } else if (isVisited) {
+                    style = 'bg-red-600 dark:bg-red-600 text-white border-red-600 font-bold shadow-sm';
+                  } else {
+                    style = 'bg-surface-100 dark:bg-surface-800 text-text-secondary border-border-color';
                   }
                   if (isCurrent) {
-                    style += ' ring-2 ring-neutral-400 dark:ring-neutral-200';
+                    style += ' ring-2 ring-neutral-900 dark:ring-neutral-100 ring-offset-1 dark:ring-offset-neutral-900 font-extrabold';
                   }
 
                   return (
@@ -1863,9 +1894,9 @@ export const MockTestAttempt = () => {
                       }}
                       className={`h-11 rounded-lg border font-mono text-xs font-semibold transition flex items-center justify-center relative touch-manipulation active:scale-95 ${style}`}
                     >
-                      <span className={isMarked ? 'text-neutral-900 dark:text-neutral-100 font-extrabold' : ''}>{qIdx + 1}</span>
+                      <span>{qIdx + 1}</span>
                       {isMarked && (
-                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-neutral-100" />
+                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-white shadow-sm" />
                       )}
                     </button>
                   );
@@ -1936,6 +1967,13 @@ export const MockTestAttempt = () => {
               </div>
             </div>
 
+            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+              <AlertCircle size={15} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <span>
+                <strong>Notice:</strong> You can resume this test within <strong>7 days</strong>. After 7 days, your test will be automatically submitted.
+              </span>
+            </div>
+
             <p className="text-xs text-text-secondary leading-relaxed">
               When ready, return to this mock test and click <strong>"Resume Test"</strong> to continue where you left off.
             </p>
@@ -1967,102 +2005,70 @@ export const MockTestAttempt = () => {
       {/* Exit Fullscreen Anti-Cheating Modal */}
       {showExitFullscreenModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="card max-w-lg w-full p-6 space-y-5 border-neutral-500 shadow-2xl bg-surface-0 dark:bg-surface-900 animate-in zoom-in-95 duration-150">
-            <div className="flex items-start gap-3.5 pb-3 border-b border-border-color">
-              <div className="p-2.5 rounded-xl bg-surface-100 dark:bg-surface-800 border border-border-color text-text-primary shrink-0">
-                <ShieldAlert size={24} />
-              </div>
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-200 dark:bg-surface-700 text-text-primary border border-border-color">
-                  Anti-Cheating Security Guard
-                </span>
-                <h3 className="text-base sm:text-lg font-bold text-text-primary mt-1">
-                  Exit Fullscreen Request
-                </h3>
-                <p className="text-xs text-text-secondary mt-0.5">
-                  To prevent cheating and maintain assessment integrity, please select how you wish to proceed before leaving fullscreen mode:
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {/* Option 1: Pause & Resume Test Later */}
-              <div className="p-4 rounded-xl border border-border-color bg-surface-50 dark:bg-surface-800/50 hover:border-neutral-400 transition space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
-                    <RotateCcw size={14} />
-                    Option 1: Pause & Resume Later
-                  </span>
-                  <span className="text-[11px] font-mono text-text-secondary">
-                    Resumes: {resumesRemaining}/4 left
-                  </span>
+          <div className="card max-w-md w-full p-6 space-y-5 border-neutral-500 shadow-2xl bg-surface-0 dark:bg-surface-900 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-border-color">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-surface-100 dark:bg-surface-800 border border-border-color text-text-primary shrink-0">
+                  <ShieldAlert size={22} />
                 </div>
-                <p className="text-xs text-text-secondary leading-relaxed">
-                  Your current answers ({attemptedCount}/{totalQuestions}) and remaining time ({formatTimer(timeLeft)}) will be safely saved to the server. Fullscreen will exit, and you can resume the test whenever you are ready.
-                </p>
-                <button
-                  type="button"
-                  id="exit-fs-resume-btn"
-                  onClick={async () => {
-                    setShowExitFullscreenModal(false);
-                    await exitFullscreen();
-                    await handlePauseAndSave();
-                  }}
-                  disabled={isPausing}
-                  className="btn btn-secondary btn-sm w-full justify-center flex items-center gap-1.5 font-semibold text-xs py-2 touch-manipulation"
-                >
-                  <RotateCcw size={13} />
-                  <span>{isPausing ? 'Saving Session...' : 'Pause Test & Exit Fullscreen'}</span>
-                </button>
-              </div>
-
-              {/* Option 2: Submit Test Now */}
-              <div className="p-4 rounded-xl border border-border-color bg-surface-50 dark:bg-surface-800/50 hover:border-neutral-400 transition space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
-                    <Send size={14} />
-                    Option 2: Submit Test Now
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-200 dark:bg-surface-700 text-text-primary border border-border-color">
+                    Anti-Cheating Security Guard
                   </span>
-                  <span className="text-[11px] font-mono text-text-secondary">
-                    Final Submission
-                  </span>
+                  <h3 className="text-base sm:text-lg font-bold text-text-primary mt-1">
+                    Exit Fullscreen Request
+                  </h3>
                 </div>
-                <p className="text-xs text-text-secondary leading-relaxed">
-                  Exit fullscreen and conclude the test immediately. All your selected answers will be evaluated and your detailed scorecard generated.
-                </p>
-                <button
-                  type="button"
-                  id="exit-fs-submit-btn"
-                  onClick={async () => {
-                    setShowExitFullscreenModal(false);
-                    await exitFullscreen();
-                    await submitTestInternal();
-                  }}
-                  disabled={isSubmitting}
-                  className="btn btn-primary btn-sm w-full justify-center flex items-center gap-1.5 font-semibold text-xs py-2 touch-manipulation"
-                >
-                  <CheckCircle2 size={13} />
-                  <span>{isSubmitting ? 'Submitting...' : 'Submit Test & Exit Fullscreen'}</span>
-                </button>
               </div>
-            </div>
-
-            <div className="pt-2 border-t border-border-color flex items-center justify-between">
-              <span className="text-[11px] text-text-secondary">
-                Clicked by mistake?
-              </span>
               <button
                 type="button"
-                id="exit-fs-cancel-btn"
                 onClick={async () => {
                   setShowExitFullscreenModal(false);
                   if (!isFullscreen) {
-                    await requestFullscreen();
+                    await requestFullscreen().catch(() => {});
                   }
                 }}
-                className="btn btn-secondary btn-sm text-xs font-semibold px-4 touch-manipulation"
+                className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-100 dark:hover:bg-surface-800 transition"
+                title="Dismiss"
+                aria-label="Close"
               >
-                Stay in Fullscreen & Continue
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3 pt-1">
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium text-center bg-amber-50 dark:bg-amber-950/40 py-1.5 px-2.5 rounded-lg border border-amber-200 dark:border-amber-900/50">
+                ⚠️ You can resume within 7 days. After 7 days, it will be automatically submitted.
+              </p>
+
+              <button
+                type="button"
+                id="exit-fs-resume-btn"
+                onClick={async () => {
+                  setShowExitFullscreenModal(false);
+                  await exitFullscreen();
+                  await handlePauseAndSave();
+                }}
+                disabled={isPausing}
+                className="btn btn-primary w-full justify-center flex items-center gap-2 font-semibold text-sm py-3 rounded-xl touch-manipulation transition"
+              >
+                <RotateCcw size={16} />
+                <span>{isPausing ? 'Saving Session...' : 'Pause Test & Exit Fullscreen'}</span>
+              </button>
+
+              <button
+                type="button"
+                id="exit-fs-submit-btn"
+                onClick={async () => {
+                  setShowExitFullscreenModal(false);
+                  await exitFullscreen();
+                  await submitTestInternal();
+                }}
+                disabled={isSubmitting}
+                className="btn btn-primary w-full justify-center flex items-center gap-2 font-semibold text-sm py-3 rounded-xl touch-manipulation transition"
+              >
+                <CheckCircle2 size={16} />
+                <span>{isSubmitting ? 'Submitting...' : 'Submit Test & Exit Fullscreen'}</span>
               </button>
             </div>
           </div>
@@ -2072,45 +2078,45 @@ export const MockTestAttempt = () => {
       {/* Window Switch Anti-Cheating Warning Modal */}
       {showWindowSwitchModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="card max-w-md w-full p-6 space-y-4 border-neutral-500 shadow-2xl bg-surface-0 dark:bg-surface-900 animate-in zoom-in-95 duration-150">
+          <div className="card max-w-md w-full p-6 space-y-4 border-red-500/50 shadow-2xl bg-surface-0 dark:bg-surface-900 animate-in zoom-in-95 duration-150 ring-1 ring-red-500/30">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-surface-200 dark:bg-surface-700 border border-neutral-500 text-text-primary shrink-0">
+              <div className="p-3 rounded-xl bg-red-100 dark:bg-red-950/70 border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 shrink-0">
                 <ShieldAlert size={26} />
               </div>
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-text-primary border border-border-color">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
                   Anti-Cheating Security Alert
                 </span>
-                <h3 className="text-base font-bold text-text-primary mt-1">
-                  Window Switch Warning
+                <h3 className="text-base font-bold text-red-600 dark:text-red-400 mt-1">
+                  Tab / Window Switch Warning
                 </h3>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-lg bg-surface-50 dark:bg-surface-800/60 border border-border-color text-xs space-y-2">
+            <div className="p-3.5 rounded-lg bg-red-50/70 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 text-xs space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-text-secondary">Switch Event:</span>
-                <span className="font-mono font-bold text-text-primary">
+                <span className="text-red-700 dark:text-red-300 font-medium">Switch Event:</span>
+                <span className="font-mono font-bold text-red-600 dark:text-red-400">
                   Incident #{windowSwitchIncident || sessionMeta.tabSwitchCount || 1}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-text-secondary">Time Spent Away:</span>
-                <span className="font-mono font-bold text-text-primary">
+                <span className="text-red-700 dark:text-red-300 font-medium">Time Spent Away:</span>
+                <span className="font-mono font-bold text-red-600 dark:text-red-400">
                   {lastAwayDuration} second{lastAwayDuration === 1 ? '' : 's'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-text-secondary">Total Suspicious Away Time:</span>
-                <span className="font-mono font-bold text-text-primary">
+                <span className="text-red-700 dark:text-red-300 font-medium">Total Suspicious Away Time:</span>
+                <span className="font-mono font-bold text-red-600 dark:text-red-400">
                   {sessionMeta.totalTimeAwaySeconds}s
                 </span>
               </div>
             </div>
 
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Switching windows, opening other applications, or changing browser tabs is strictly monitored to prevent unauthorized aids. This event has been logged in your assessment integrity audit.
-            </p>
+            <div className="p-3 rounded-lg bg-red-50/50 dark:bg-red-950/20 border-l-2 border-red-500 text-xs text-red-700 dark:text-red-300 leading-relaxed font-medium">
+              Switching windows, opening other applications, or changing browser tabs is strictly monitored to prevent unauthorized aids. This incident has been logged in your assessment integrity audit.
+            </div>
 
             <div className="pt-2 border-t border-border-color flex justify-end">
               <button
@@ -2122,7 +2128,7 @@ export const MockTestAttempt = () => {
                     await requestFullscreen().catch(() => {});
                   }
                 }}
-                className="btn btn-primary btn-sm flex items-center gap-1.5 text-xs font-semibold px-4 min-h-[38px] touch-manipulation"
+                className="btn bg-red-600 hover:bg-red-700 active:bg-red-800 text-white btn-sm flex items-center gap-1.5 text-xs font-semibold px-4 min-h-[38px] touch-manipulation shadow-sm shadow-red-600/30"
               >
                 <CheckCircle2 size={14} />
                 <span>I Understand & Return to Test</span>

@@ -11,22 +11,42 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('studyhub_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return Boolean(localStorage.getItem('studyhub_token'));
+  });
+
+  const [loading, setLoading] = useState(() => {
+    return Boolean(localStorage.getItem('studyhub_token'));
+  });
 
   const loadUser = useCallback(async () => {
     const token = localStorage.getItem('studyhub_token');
     if (!token) {
+      setUser(null);
+      setIsAuthenticated(false);
       setLoading(false);
       return;
     }
     try {
       const { data } = await authApi.getMe();
-      setUser(data.data.user);
+      const currentUser = data?.data?.user;
+      setUser(currentUser);
       setIsAuthenticated(true);
+      if (currentUser) {
+        localStorage.setItem('studyhub_user', JSON.stringify(currentUser));
+      }
     } catch {
       localStorage.removeItem('studyhub_token');
+      localStorage.removeItem('studyhub_user');
       setUser(null);
       setIsAuthenticated(false);
     } finally {
@@ -41,8 +61,12 @@ export const AuthProvider = ({ children }) => {
   const login = useCallback((token, userData) => {
     disconnectSocket();
     localStorage.setItem('studyhub_token', token);
+    if (userData) {
+      localStorage.setItem('studyhub_user', JSON.stringify(userData));
+    }
     setUser(userData);
     setIsAuthenticated(true);
+    setLoading(false);
   }, []);
 
   const logout = useCallback(async () => {
@@ -53,12 +77,22 @@ export const AuthProvider = ({ children }) => {
     }
     disconnectSocket();
     localStorage.removeItem('studyhub_token');
+    localStorage.removeItem('studyhub_user');
     setUser(null);
     setIsAuthenticated(false);
+    setLoading(false);
   }, []);
 
   const updateUser = useCallback((userData) => {
-    setUser(prev => ({ ...prev, ...userData }));
+    setUser((prev) => {
+      const updated = { ...prev, ...userData };
+      try {
+        localStorage.setItem('studyhub_user', JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
   }, []);
 
   return (

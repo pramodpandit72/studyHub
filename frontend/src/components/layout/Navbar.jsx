@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export const Navbar = () => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -126,6 +126,10 @@ export const Navbar = () => {
                   <LogOut size={14} />
                   <span>Logout</span>
                 </button>
+              </div>
+            ) : loading ? (
+              <div className="hidden sm:flex items-center gap-2">
+                <div className="w-16 h-8 rounded-lg bg-surface-100 dark:bg-surface-800 animate-pulse" />
               </div>
             ) : (
               <div className="hidden sm:flex items-center gap-2">
